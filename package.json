@@ -1,6 +1,6 @@
 {
   "name": "kinopoisk_enhanced",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "UserJS script for improving the Kinopoisk user experience.",
   "type": "module",

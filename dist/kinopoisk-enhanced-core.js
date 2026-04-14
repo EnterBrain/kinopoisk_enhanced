@@ -738,7 +738,13 @@ function run(context = {}) {
   console.info("[Kinopoisk Enhanced] core initialized", context);
 }
 
-  global.KinopoiskEnhancedCore = {
+  const api = {
     run,
   };
+
+  global.KinopoiskEnhancedCore = api;
+
+  if (typeof window !== "undefined") {
+    window.KinopoiskEnhancedCore = api;
+  }
 })(typeof globalThis !== "undefined" ? globalThis : window);

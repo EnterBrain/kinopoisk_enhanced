@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kinopoisk Enhanced Loader
 // @namespace    https://github.com/enterbrain42/kinopoisk_enhanced
-// @version      0.1.0
+// @version      0.1.1
 // @description  Добавляет кнопку на Кинопоиск и запускает Kinopoisk Enhanced Core на выбранных сайтах.
 // @author       enterbrain42
 // @license      Apache-2.0
@@ -364,12 +364,70 @@
     });
   }
   
-  function evaluateCoreScript(source) {
-    if (!source.trim()) {
-      throw new Error("Core script is empty");
+  function getLoadedCoreApi() {
+    return globalThis.KinopoiskEnhancedCore
+      || window.KinopoiskEnhancedCore
+      || (typeof unsafeWindow !== "undefined" ? unsafeWindow.KinopoiskEnhancedCore : null)
+      || null;
+  }
+  
+  function exposeLoadedCoreApi(core) {
+    if (!core?.run) {
+      return;
     }
   
-    Function(`${source}\n//# sourceURL=${CORE_SCRIPT_URL}`)();
+    globalThis.KinopoiskEnhancedCore = core;
+    window.KinopoiskEnhancedCore = core;
+  
+    if (typeof unsafeWindow !== "undefined") {
+      try {
+        unsafeWindow.KinopoiskEnhancedCore = core;
+      } catch (error) {
+        console.warn("[Kinopoisk Enhanced] failed to expose core on unsafeWindow", error);
+      }
+    }
+  }
+  
+  function isLikelyJavaScript(source) {
+    const text = String(source || "").trimStart();
+    const probe = text.slice(0, 160).toLowerCase();
+  
+    if (!text.trim()) {
+      return false;
+    }
+  
+    if (/^(https?:\/\/|file:\/\/)/i.test(text.trim())) {
+      return false;
+    }
+  
+    return !(probe.startsWith("<!doctype") || probe.startsWith("<html") || probe.includes("not found"));
+  }
+  
+  function evaluateCoreScript(source) {
+    if (!isLikelyJavaScript(source)) {
+      throw new Error(`Core script resource is not valid JavaScript. Preview: ${String(source || "").slice(0, 120)}`);
+    }
+  
+    const gmApi = {
+      GM_getValue: typeof GM_getValue === "function" ? GM_getValue : null,
+      GM_setValue: typeof GM_setValue === "function" ? GM_setValue : null,
+      GM_xmlhttpRequest: typeof GM_xmlhttpRequest === "function" ? GM_xmlhttpRequest : null,
+    };
+  
+    const core = Function(
+      "gmApi",
+      `
+        const { GM_getValue, GM_setValue, GM_xmlhttpRequest } = gmApi;
+        ${source}
+        return (typeof globalThis !== "undefined" && globalThis.KinopoiskEnhancedCore)
+          || (typeof window !== "undefined" && window.KinopoiskEnhancedCore)
+          || null;
+        //# sourceURL=${CORE_SCRIPT_URL}
+      `,
+    )(gmApi);
+  
+    exposeLoadedCoreApi(core);
+    return core;
   }
   
   async function ensureCoreStylesLoaded() {
@@ -391,21 +449,21 @@
   }
   
   async function ensureCoreLoaded() {
-    if (window.KinopoiskEnhancedCore?.run) {
-      return window.KinopoiskEnhancedCore;
+    const loadedCore = getLoadedCoreApi();
+    if (loadedCore?.run) {
+      return loadedCore;
     }
   
     coreLoadPromise ??= (async () => {
       const bundledCore = getBundledResourceText(CORE_RESOURCE_NAME);
       const source = bundledCore.trim() ? bundledCore : await requestText(CORE_SCRIPT_URL);
   
-      evaluateCoreScript(source);
-  
-      if (!window.KinopoiskEnhancedCore?.run) {
+      const core = evaluateCoreScript(source) || getLoadedCoreApi();
+      if (!core?.run) {
         throw new Error("Loaded core did not expose KinopoiskEnhancedCore.run");
       }
   
-      return window.KinopoiskEnhancedCore;
+      return core;
     })();
   
     return coreLoadPromise;
