@@ -8,10 +8,9 @@
   const STORAGE_PREFIX = "kinopoisk-enhanced-core";
   const CONTROL_BUTTONS_ID = "kinopoisk-enhanced-core-footer-controls";
   const ASPECT_RATIO_OPTIONS = [
-    { value: "native", label: "Auto", cssValue: "" },
     { value: "16:9", label: "16:9", cssValue: "16 / 9" },
+    { value: "12:5", label: "12:5", cssValue: "12 / 5" },
     { value: "4:3", label: "4:3", cssValue: "4 / 3" },
-    { value: "21:9", label: "21:9", cssValue: "21 / 9" },
     { value: "fill", label: "Fill", cssValue: "" },
   ];
   const SELECTORS = {
@@ -150,7 +149,64 @@ function findMediaElement(root) {
     return directVideo;
   }
 
-  return root.querySelector("iframe");
+  const iframe = root.querySelector("iframe");
+  const iframeVideo = findVideoInsideIframe(iframe);
+  return iframeVideo || iframe;
+}
+
+function findVideoInsideIframe(iframe) {
+  if (!(iframe instanceof HTMLIFrameElement)) {
+    return null;
+  }
+
+  try {
+    return iframe.contentDocument?.querySelector("video") || null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function findMediaFrame(target, mainContainer) {
+  if (!target) {
+    return null;
+  }
+
+  if (target.ownerDocument !== document) {
+    const ownerIframe = findOwnerIframeForDocument(target.ownerDocument, mainContainer);
+    return findIframeFrame(ownerIframe) || ownerIframe || target;
+  }
+
+  if (target instanceof HTMLIFrameElement) {
+    return findIframeFrame(target) || target;
+  }
+
+  return target.closest("video, iframe, [class*='player'], [id*='player']")
+    || target.parentElement
+    || target;
+}
+
+function findIframeFrame(iframe) {
+  if (!(iframe instanceof HTMLIFrameElement)) {
+    return null;
+  }
+
+  return iframe.closest("[class*='iframe_container' i], [class*='player' i], [id*='player' i]")
+    || iframe.parentElement
+    || iframe;
+}
+
+function findOwnerIframeForDocument(targetDocument, mainContainer) {
+  if (!targetDocument || !mainContainer) {
+    return null;
+  }
+
+  return Array.from(mainContainer.querySelectorAll("iframe")).find((iframe) => {
+    try {
+      return iframe.contentDocument === targetDocument;
+    } catch (error) {
+      return false;
+    }
+  }) || null;
 }
 
 function getAspectRatioOption(value) {
@@ -162,9 +218,13 @@ class MediaTargetTracker {
     this.mainContainer = null;
     this.currentTarget = null;
     this.observer = null;
+    this.iframeObserver = null;
+    this.observedIframe = null;
+    this.observedIframeBody = null;
     this.subscribers = new Set();
     this.syncTimer = null;
     this.initialized = false;
+    this.iframeLoadHandler = () => this.scheduleSync();
     this.visibilityHandler = () => {
       if (!document.hidden) {
         this.scheduleSync();
@@ -221,9 +281,49 @@ class MediaTargetTracker {
     });
   }
 
+  ensureIframeObserver(mainContainer) {
+    const iframe = mainContainer?.querySelector("iframe") || null;
+
+    if (this.observedIframe && this.observedIframe !== iframe) {
+      this.observedIframe.removeEventListener("load", this.iframeLoadHandler);
+      this.observedIframe = null;
+    }
+
+    if (iframe && this.observedIframe !== iframe) {
+      this.observedIframe = iframe;
+      iframe.addEventListener("load", this.iframeLoadHandler);
+    }
+
+    let iframeBody = null;
+    try {
+      iframeBody = iframe?.contentDocument?.body || null;
+    } catch (error) {
+      iframeBody = null;
+    }
+
+    if (this.observedIframeBody === iframeBody) {
+      return;
+    }
+
+    this.iframeObserver?.disconnect();
+    this.iframeObserver = null;
+    this.observedIframeBody = iframeBody;
+
+    if (!iframeBody) {
+      return;
+    }
+
+    this.iframeObserver = new MutationObserver(() => this.scheduleSync());
+    this.iframeObserver.observe(iframeBody, {
+      childList: true,
+      subtree: true,
+    });
+  }
+
   sync() {
     const mainContainer = document.querySelector(SELECTORS.mainContainer);
     this.ensureObserver(mainContainer);
+    this.ensureIframeObserver(mainContainer);
 
     const nextTarget = findMediaElement(mainContainer);
     if (nextTarget === this.currentTarget) {
@@ -243,7 +343,7 @@ class VideoEffects {
     this.target = null;
     this.blurButton = null;
     this.mirrorButton = null;
-    tracker.subscribe((target, _mainContainer, previousTarget) => this.setTarget(target, previousTarget));
+    tracker.subscribe((target, mainContainer, previousTarget) => this.setTarget(target, mainContainer, previousTarget));
   }
 
   mount(parent) {
@@ -263,12 +363,18 @@ class VideoEffects {
     this.updateButtons();
   }
 
-  setTarget(target, previousTarget) {
+  setTarget(target, mainContainer, previousTarget) {
+    const previousFrame = findMediaFrame(previousTarget, mainContainer);
     previousTarget?.classList.remove(
       "kinopoisk-enhanced-core-media--blur",
       "kinopoisk-enhanced-core-media--mirror",
     );
+    previousFrame?.classList.remove(
+      "kinopoisk-enhanced-core-media--blur",
+      "kinopoisk-enhanced-core-media--mirror",
+    );
     this.target = target;
+    this.frame = findMediaFrame(target, mainContainer);
     this.apply();
     this.updateButtons();
   }
@@ -292,8 +398,12 @@ class VideoEffects {
       return;
     }
 
-    this.target.classList.toggle("kinopoisk-enhanced-core-media--blur", this.blurEnabled);
-    this.target.classList.toggle("kinopoisk-enhanced-core-media--mirror", this.mirrorEnabled);
+    const visualTarget = this.frame || this.target;
+
+    this.target.classList.toggle("kinopoisk-enhanced-core-media--blur", this.blurEnabled && !this.frame);
+    this.target.classList.toggle("kinopoisk-enhanced-core-media--mirror", this.mirrorEnabled && !this.frame);
+    visualTarget?.classList.toggle("kinopoisk-enhanced-core-media--blur", this.blurEnabled);
+    visualTarget?.classList.toggle("kinopoisk-enhanced-core-media--mirror", this.mirrorEnabled);
   }
 
   updateButtons() {
@@ -316,6 +426,7 @@ class AspectRatioSelector {
   constructor(tracker) {
     this.mode = getAspectRatioOption(storageGet("aspect-ratio-mode", "native")).value;
     this.target = null;
+    this.frame = null;
     this.mainContainer = null;
     this.button = null;
     tracker.subscribe((target, mainContainer, previousTarget) => this.setTarget(target, mainContainer, previousTarget));
@@ -333,8 +444,9 @@ class AspectRatioSelector {
   }
 
   setTarget(target, mainContainer, previousTarget) {
-    this.cleanupTarget(previousTarget);
+    this.cleanupTarget(previousTarget, findMediaFrame(previousTarget, mainContainer));
     this.target = target;
+    this.frame = findMediaFrame(target, mainContainer);
     this.mainContainer = mainContainer;
     this.apply();
     this.updateButton();
@@ -349,47 +461,38 @@ class AspectRatioSelector {
     this.updateButton();
   }
 
-  cleanupTarget(target) {
-    if (!target) {
-      return;
+  cleanupTarget(target, frame = this.frame) {
+    for (const element of [target, frame].filter(Boolean)) {
+      element.classList.remove(
+        "kinopoisk-enhanced-core-media--aspect-managed",
+        "kinopoisk-enhanced-core-media--aspect-fill",
+        "kinopoisk-enhanced-core-media-frame",
+      );
+      element.style.removeProperty("--kinopoisk-enhanced-core-player-aspect-ratio");
     }
-
-    target.classList.remove("kinopoisk-enhanced-core-media--aspect-managed");
-    target.style.removeProperty("aspect-ratio");
-    target.style.removeProperty("height");
-    target.style.removeProperty("max-height");
-    target.style.removeProperty("object-fit");
-    target.style.removeProperty("width");
   }
 
   apply() {
-    if (!this.target) {
+    if (!this.target && !this.frame) {
       return;
     }
 
     const option = getAspectRatioOption(this.mode);
-    this.cleanupTarget(this.target);
+    const frame = this.frame || this.target;
+    this.cleanupTarget(this.target, frame);
 
-    if (option.value === "native") {
-      this.mainContainer?.classList.remove("kinopoisk-enhanced-core-main--fill-media");
-      return;
-    }
-
-    this.target.classList.add("kinopoisk-enhanced-core-media--aspect-managed");
-    this.target.style.width = "100%";
-    this.target.style.maxHeight = "100%";
+    frame.classList.add("kinopoisk-enhanced-core-media-frame");
+    frame.style.setProperty("--kinopoisk-enhanced-core-player-aspect-ratio", option.cssValue || "16 / 9");
+    this.target?.classList.add("kinopoisk-enhanced-core-media--aspect-managed");
 
     if (option.value === "fill") {
-      this.target.style.height = "100%";
-      this.target.style.objectFit = "fill";
+      frame.classList.add("kinopoisk-enhanced-core-media--aspect-fill");
+      this.target?.classList.add("kinopoisk-enhanced-core-media--aspect-fill");
       this.mainContainer?.classList.add("kinopoisk-enhanced-core-main--fill-media");
       return;
     }
 
     this.mainContainer?.classList.remove("kinopoisk-enhanced-core-main--fill-media");
-    this.target.style.aspectRatio = option.cssValue;
-    this.target.style.height = "auto";
-    this.target.style.objectFit = "contain";
   }
 
   updateButton() {
@@ -398,9 +501,9 @@ class AspectRatioSelector {
     }
 
     const option = getAspectRatioOption(this.mode);
-    this.button.disabled = !this.target;
+    this.button.disabled = !this.target && !this.frame;
     this.button.textContent = option.label;
-    this.button.classList.toggle("kinopoisk-enhanced-core-footer__button--active", option.value !== "native");
+    this.button.classList.add("kinopoisk-enhanced-core-footer__button--active");
     this.button.title = `Соотношение сторон: ${option.label}`;
   }
 }

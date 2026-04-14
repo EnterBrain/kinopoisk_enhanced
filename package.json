@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "check": "npm run build && node --check dist/kinopoisk-enhanced-loader.user.js && node --check dist/kinopoisk-enhanced-core.js"
+    "check": "npm run build && node --check dist/kinopoisk-enhanced-loader.user.js && node --check dist/kinopoisk-enhanced-core.js && node --check dist/kinopoisk-enhanced-dev.user.js"
   },
   "keywords": [
     "userjs",

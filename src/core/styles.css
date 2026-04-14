@@ -217,21 +217,48 @@ div.topAdPad {
 }
 
 .kinopoisk-enhanced-core-media--blur {
-  filter: blur(9px) saturate(0.92) !important;
+  filter: blur(50px) !important;
 }
 
 .kinopoisk-enhanced-core-media--mirror {
   transform: scaleX(-1) !important;
+  transform-origin: center !important;
 }
 
 .kinopoisk-enhanced-core-media--blur.kinopoisk-enhanced-core-media--mirror {
-  filter: blur(9px) saturate(0.92) !important;
+  filter: blur(50px) !important;
   transform: scaleX(-1) !important;
+  transform-origin: center !important;
+}
+
+.kinopoisk-enhanced-core-media-frame {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  max-height: 100% !important;
+  aspect-ratio: var(--kinopoisk-enhanced-core-player-aspect-ratio) !important;
+  margin-inline: auto !important;
+  overflow: hidden !important;
 }
 
 .kinopoisk-enhanced-core-media--aspect-managed {
   display: block !important;
-  margin-inline: auto !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain !important;
+}
+
+.kinopoisk-enhanced-core-media--aspect-fill {
+  width: 100% !important;
+  height: 100% !important;
+  aspect-ratio: auto !important;
+  object-fit: fill !important;
 }
 
 .mainContainer.kinopoisk-enhanced-core-main--fill-media {

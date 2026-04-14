@@ -39,6 +39,7 @@ UserJS-скрипт для улучшения пользовательского
 ├── dist
 │   ├── kinopoisk-enhanced-core.js
 │   ├── kinopoisk-enhanced-core.css
+│   ├── kinopoisk-enhanced-dev.user.js
 │   └── kinopoisk-enhanced-loader.user.js
 ├── README.md
 ├── package.json
@@ -61,6 +62,8 @@ UserJS-скрипт для улучшения пользовательского
 
 Core находится в `src/core/main.js`. Loader не встраивает core в себя: он подтягивает собранный plain JS core и CSS как `@resource` и запускает core только на сайтах из пользовательского списка.
 
+Для локального тестирования есть dev-монолит `dist/kinopoisk-enhanced-dev.user.js`: он встраивает loader, core JS и core CSS в один userscript, чтобы проверять изменения без пуша в GitHub и без кэша `@resource`.
+
 Метаданные UserJS находятся в `meta.json`, а стили - в `styles.css` внутри соответствующего модуля.
 
 Чтобы собрать готовый файл:
@@ -74,6 +77,7 @@ npm run build
 - `dist/kinopoisk-enhanced-loader.user.js` - основной userscript для установки.
 - `dist/kinopoisk-enhanced-core.js` - plain JS core-артефакт без userscript-метаданных, который loader подтягивает на `kinopoisk.net` и других зеркалах.
 - `dist/kinopoisk-enhanced-core.css` - стили core, которые loader подтягивает рядом с core-скриптом.
+- `dist/kinopoisk-enhanced-dev.user.js` - монолитный userscript для локального тестирования.
 
 Версия автоматически берется из `package.json`.
 
