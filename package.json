@@ -1,0 +1,19 @@
+{
+  "name": "kinopoisk_enhanced",
+  "version": "0.1.0",
+  "private": true,
+  "description": "UserJS script for improving the Kinopoisk user experience.",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "npm run build && node --check dist/kinopoisk-enhanced-loader.user.js && node --check dist/kinopoisk-enhanced-core.user.js"
+  },
+  "keywords": [
+    "userjs",
+    "userscript",
+    "kinopoisk",
+    "tampermonkey",
+    "violentmonkey"
+  ],
+  "license": "Apache-2.0"
+}
