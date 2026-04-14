@@ -10,11 +10,19 @@
   "grant": [
     "GM_getValue",
     "GM_setValue",
+    "GM_getResourceText",
     "GM_registerMenuCommand",
     "GM_unregisterMenuCommand",
     "GM_notification",
     "GM_xmlhttpRequest"
   ],
-  "connect": "www.kinopoisk.ru",
+  "resource": [
+    "KinopoiskEnhancedCore https://raw.githubusercontent.com/EnterBrain/kinopoisk_enhanced/main/dist/kinopoisk-enhanced-core.js",
+    "KinopoiskEnhancedCoreCss https://raw.githubusercontent.com/EnterBrain/kinopoisk_enhanced/main/dist/kinopoisk-enhanced-core.css"
+  ],
+  "connect": [
+    "www.kinopoisk.ru",
+    "raw.githubusercontent.com"
+  ],
   "run-at": "document-idle"
 }

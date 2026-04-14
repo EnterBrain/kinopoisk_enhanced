@@ -11,13 +11,14 @@ const targets = [
   {
     name: "core",
     sourceDir: path.join(rootDir, "src", "core"),
-    outputFile: path.join(distDir, "kinopoisk-enhanced-core.user.js"),
+    outputFile: path.join(distDir, "kinopoisk-enhanced-core.js"),
+    cssOutputFile: path.join(distDir, "kinopoisk-enhanced-core.css"),
+    plainScript: true,
   },
   {
     name: "loader",
     sourceDir: path.join(rootDir, "src", "loader"),
     outputFile: path.join(distDir, "kinopoisk-enhanced-loader.user.js"),
-    embeddedCore: path.join(rootDir, "src", "core"),
   },
 ];
 
@@ -59,33 +60,9 @@ async function readModule(sourceDir) {
   return { metadata, styles, source };
 }
 
-function buildOutput({ metadata, styles, source, embeddedCore }) {
+function buildOutput({ metadata, styles, source }) {
   const banner = toMetadataLines(metadata);
   const wrappedStyles = JSON.stringify(styles);
-  const coreBlock = embeddedCore
-    ? `
-  function loadEmbeddedCore(context) {
-    const CORE_CSS = ${JSON.stringify(embeddedCore.styles)};
-
-    function injectCoreStyles(css) {
-      if (!css.trim() || document.querySelector("style[data-kinopoisk-enhanced-core-styles]")) {
-        return;
-      }
-
-      const style = document.createElement("style");
-      style.dataset.kinopoiskEnhancedCoreStyles = "true";
-      style.textContent = css;
-      document.head.append(style);
-    }
-
-    injectCoreStyles(CORE_CSS);
-
-${indent(embeddedCore.source)}
-
-    window.KinopoiskEnhancedCore?.run(context);
-  }
-`
-    : "";
 
   return `${banner}
 
@@ -106,24 +83,32 @@ ${indent(embeddedCore.source)}
   }
 
   injectStyles(USERSCRIPT_CSS);
-${coreBlock}
 ${indent(source)}
 })();
 `;
+}
+
+function buildPlainScript({ source }) {
+  return `${source.trim()}\n`;
 }
 
 await mkdir(distDir, { recursive: true });
 
 for (const target of targets) {
   const module = await readModule(target.sourceDir);
-  const embeddedCore = target.embeddedCore ? await readModule(target.embeddedCore) : null;
-  const output = buildOutput({
-    metadata: module.metadata,
-    styles: module.styles,
-    source: module.source,
-    embeddedCore,
-  });
+  const output = target.plainScript
+    ? buildPlainScript({ source: module.source })
+    : buildOutput({
+        metadata: module.metadata,
+        styles: module.styles,
+        source: module.source,
+      });
 
   await writeFile(target.outputFile, output);
   console.info(`Built ${path.relative(rootDir, target.outputFile)}`);
+
+  if (target.cssOutputFile) {
+    await writeFile(target.cssOutputFile, module.styles);
+    console.info(`Built ${path.relative(rootDir, target.cssOutputFile)}`);
+  }
 }

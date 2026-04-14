@@ -2,6 +2,10 @@ const APP_ID = "kinopoisk-enhanced";
 const FEATURE_BUTTON_ID = `${APP_ID}-watch`;
 const FEATURE_BUTTON_WRAPPER_ID = `${APP_ID}-watch-wrapper`;
 const CORE_HOSTS_STORAGE_KEY = `${APP_ID}:core-hosts`;
+const CORE_RESOURCE_NAME = "KinopoiskEnhancedCore";
+const CORE_CSS_RESOURCE_NAME = "KinopoiskEnhancedCoreCss";
+const CORE_SCRIPT_URL = "https://raw.githubusercontent.com/EnterBrain/kinopoisk_enhanced/main/dist/kinopoisk-enhanced-core.js";
+const CORE_CSS_URL = "https://raw.githubusercontent.com/EnterBrain/kinopoisk_enhanced/main/dist/kinopoisk-enhanced-core.css";
 const DEFAULT_CORE_HOSTS = ["fbsite.top", "kinopoisk.net"];
 const KINOPOISK_HOSTS = new Set(["kinopoisk.ru", "www.kinopoisk.ru"]);
 const FILM_PAGE_PATTERN = /^\/(?:film|series)\/\d+\/?/;
@@ -15,6 +19,7 @@ const SELECTORS = {
 let lastHandledUrl = "";
 let observer;
 let menuCommandIds = [];
+let coreLoadPromise;
 
 function isKinopoiskPage() {
   return KINOPOISK_HOSTS.has(window.location.hostname);
@@ -277,6 +282,101 @@ function resetCoreHosts() {
   notify("Список Core сброшен к значениям по умолчанию");
 }
 
+function getBundledResourceText(resourceName) {
+  if (typeof GM_getResourceText !== "function") {
+    return "";
+  }
+
+  try {
+    return GM_getResourceText(resourceName) || "";
+  } catch (error) {
+    console.warn(`[Kinopoisk Enhanced] failed to read bundled resource: ${resourceName}`, error);
+    return "";
+  }
+}
+
+function requestText(url) {
+  if (typeof GM_xmlhttpRequest === "function") {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: "GET",
+        url,
+        onload: (response) => {
+          if (response.status >= 200 && response.status < 300) {
+            resolve(response.responseText || "");
+            return;
+          }
+
+          reject(new Error(`HTTP ${response.status} while loading ${url}`));
+        },
+        onerror: reject,
+        ontimeout: reject,
+      });
+    });
+  }
+
+  return fetch(url, { credentials: "omit" }).then((response) => {
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} while loading ${url}`);
+    }
+
+    return response.text();
+  });
+}
+
+function evaluateCoreScript(source) {
+  if (!source.trim()) {
+    throw new Error("Core script is empty");
+  }
+
+  Function(`${source}\n//# sourceURL=${CORE_SCRIPT_URL}`)();
+}
+
+async function ensureCoreStylesLoaded() {
+  if (document.querySelector("style[data-kinopoisk-enhanced-core-styles]")) {
+    return;
+  }
+
+  const bundledCss = getBundledResourceText(CORE_CSS_RESOURCE_NAME);
+  const css = bundledCss.trim() ? bundledCss : await requestText(CORE_CSS_URL);
+
+  if (!css.trim()) {
+    return;
+  }
+
+  const style = document.createElement("style");
+  style.dataset.kinopoiskEnhancedCoreStyles = "true";
+  style.textContent = css;
+  document.head.append(style);
+}
+
+async function ensureCoreLoaded() {
+  if (window.KinopoiskEnhancedCore?.run) {
+    return window.KinopoiskEnhancedCore;
+  }
+
+  coreLoadPromise ??= (async () => {
+    const bundledCore = getBundledResourceText(CORE_RESOURCE_NAME);
+    const source = bundledCore.trim() ? bundledCore : await requestText(CORE_SCRIPT_URL);
+
+    evaluateCoreScript(source);
+
+    if (!window.KinopoiskEnhancedCore?.run) {
+      throw new Error("Loaded core did not expose KinopoiskEnhancedCore.run");
+    }
+
+    return window.KinopoiskEnhancedCore;
+  })();
+
+  return coreLoadPromise;
+}
+
+async function loadCore(context) {
+  await ensureCoreStylesLoaded();
+  const core = await ensureCoreLoaded();
+  core.run(context);
+}
+
 function refreshMenuCommands() {
   for (const commandId of menuCommandIds) {
     GM_unregisterMenuCommand?.(commandId);
@@ -295,10 +395,13 @@ function runCoreIfAllowed() {
     return;
   }
 
-  loadEmbeddedCore({
+  void loadCore({
     appId: APP_ID,
     host: normalizeHost(window.location.hostname),
     source: "loader",
+  }).catch((error) => {
+    console.error("[Kinopoisk Enhanced] failed to load core", error);
+    notify("Не удалось загрузить Kinopoisk Enhanced Core");
   });
 }
 
