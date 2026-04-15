@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kinopoisk Enhanced Loader Dev
 // @namespace    https://github.com/enterbrain42/kinopoisk_enhanced
-// @version      0.1.1
+// @version      0.1.2
 // @description  Добавляет кнопку на Кинопоиск и запускает Kinopoisk Enhanced Core на выбранных сайтах. Dev-монолит с embedded core для локального тестирования.
 // @author       enterbrain42
 // @license      Apache-2.0
