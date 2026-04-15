@@ -2509,12 +2509,12 @@ function createHeader() {
   const shelterLink = createActionLink({
     className: "kinopoisk-enhanced-core-header__action--shelter",
     href: getTelegramUrl() || "#",
-    text: "убежище",
+    text: "Убежище",
   });
   const returnLink = createActionLink({
     className: "kinopoisk-enhanced-core-header__action--return",
     href: getOriginalUrl(),
-    text: "вернуться",
+    text: "Вернуться",
   });
 
   header.id = HEADER_ID;
