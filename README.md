@@ -14,7 +14,16 @@ UserJS-скрипт для улучшения пользовательского
 - Открывает соответствующую страницу на `kinopoisk.net` в новой вкладке.
 - Состоит из двух уровней: `loader` и `core`.
 - Позволяет через меню Violentmonkey/Tampermonkey добавлять и удалять сайты, на которых должен запускаться `core`.
-- Из коробки запускает `core` на `kinopoisk.net`, `fbsite.fun` и `fbsite.top`.
+
+## Установка
+
+1. Установите расширение для UserJS-скриптов:
+   - Tampermonkey
+   - Violentmonkey
+   - Greasemonkey
+2. Откройте [`kinopoisk-enhanced-loader.user.js`](https://github.com/EnterBrain/kinopoisk_enhanced/raw/main/dist/kinopoisk-enhanced-loader.user.js).
+3. Подтвердите установку пользовательского скрипта в расширении.
+4. Откройте `https://www.kinopoisk.ru/` и проверьте работу скрипта.
 
 ## Установка для разработки
 
@@ -28,8 +37,8 @@ UserJS-скрипт для улучшения пользовательского
    npm run build
    ```
 
-3. Откройте файл [`dist/kinopoisk-enhanced-loader.user.js`](dist/kinopoisk-enhanced-loader.user.js).
-4. Добавьте его содержимое в новый пользовательский скрипт расширения.
+3. Откройте файл [`dist/kinopoisk-enhanced-dev.user.js`](https://github.com/EnterBrain/kinopoisk_enhanced/raw/main/dist/kinopoisk-enhanced-dev.user.js).
+4. Подтвердите установку пользовательского скрипта в расширении.
 5. Откройте `https://www.kinopoisk.ru/` и проверьте работу скрипта.
 
 ## Структура
