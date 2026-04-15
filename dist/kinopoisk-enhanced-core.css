@@ -204,7 +204,15 @@ div.topAdPad {
 }
 
 .kinopoisk-enhanced-core-footer__button--active:hover {
+  border-color: rgb(255 207 112 / 58%);
+  background: linear-gradient(135deg, rgb(255 134 31 / 96%), rgb(255 194 77 / 96%));
   color: #15110a;
+  box-shadow: 0 9px 24px rgb(255 122 0 / 22%);
+}
+
+.kinopoisk-enhanced-core-footer__button--active:active {
+  background: linear-gradient(135deg, rgb(237 105 0 / 96%), rgb(245 169 0 / 96%));
+  transform: translateY(1px);
 }
 
 .kinopoisk-enhanced-core-footer__button--icon {
@@ -547,6 +555,14 @@ div.topAdPad {
   border-color: rgb(255 179 33 / 48%);
   background: linear-gradient(135deg, rgb(255 122 0 / 88%), rgb(255 179 33 / 88%));
   color: #15110a;
+}
+
+.kinopoisk-enhanced-core-popup-active:hover,
+.kinopoisk-enhanced-core-popup-active:focus-visible {
+  border-color: rgb(255 207 112 / 58%);
+  background: linear-gradient(135deg, rgb(255 134 31 / 96%), rgb(255 194 77 / 96%));
+  color: #15110a;
+  outline: none;
 }
 
 .kinopoisk-enhanced-core-compressor-popup__advanced {
