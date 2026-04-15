@@ -49,6 +49,27 @@ function isCoreHost() {
   return getCoreHosts().includes(normalizeHost(window.location.hostname));
 }
 
+function isEmbeddedFrame() {
+  return window.top !== window;
+}
+
+function getReferrerHost() {
+  if (!document.referrer) {
+    return "";
+  }
+
+  try {
+    return normalizeHost(new URL(document.referrer).hostname);
+  } catch (error) {
+    return "";
+  }
+}
+
+function isEmbeddedFrameFromCoreHost() {
+  const referrerHost = getReferrerHost();
+  return isEmbeddedFrame() && !!referrerHost && getCoreHosts().includes(referrerHost);
+}
+
 function getMirrorUrl() {
   const url = new URL(window.location.href);
   url.hostname = url.hostname.replace(/kinopoisk\.ru$/i, "kinopoisk.net");
@@ -449,13 +470,19 @@ function refreshMenuCommands() {
 }
 
 function runCoreIfAllowed() {
-  if (!isCoreHost()) {
+  const host = normalizeHost(window.location.hostname);
+  const shouldRunCore = isCoreHost();
+  const shouldRunEmbeddedCore = isEmbeddedFrameFromCoreHost();
+
+  if (!shouldRunCore && !shouldRunEmbeddedCore) {
     return;
   }
 
   void loadCore({
     appId: APP_ID,
-    host: normalizeHost(window.location.hostname),
+    host,
+    embedded: shouldRunEmbeddedCore,
+    referrerHost: getReferrerHost(),
     source: "loader",
   }).catch((error) => {
     console.error("[Kinopoisk Enhanced] failed to load core", error);

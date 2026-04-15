@@ -7,12 +7,100 @@
   const KINOPOISK_ORIGIN = "https://www.kinopoisk.ru";
   const STORAGE_PREFIX = "kinopoisk-enhanced-core";
   const CONTROL_BUTTONS_ID = "kinopoisk-enhanced-core-footer-controls";
+  const AUDIO_COMPRESSOR_ENABLED = false;
+  const BRIDGE_APP_ID = "kinopoisk-enhanced";
+  const BRIDGE_STATUS_TYPE = "kinopoisk-enhanced:compressor-status";
+  const BRIDGE_COMMAND_TYPE = "kinopoisk-enhanced:compressor-command";
+  const BRIDGE_EFFECTS_STATUS_TYPE = "kinopoisk-enhanced:video-effects-status";
+  const BRIDGE_EFFECTS_COMMAND_TYPE = "kinopoisk-enhanced:video-effects-command";
+  const BRIDGE_ASPECT_STATUS_TYPE = "kinopoisk-enhanced:aspect-ratio-status";
+  const BRIDGE_ASPECT_COMMAND_TYPE = "kinopoisk-enhanced:aspect-ratio-command";
   const ASPECT_RATIO_OPTIONS = [
     { value: "16:9", label: "16:9", cssValue: "16 / 9" },
     { value: "12:5", label: "12:5", cssValue: "12 / 5" },
     { value: "4:3", label: "4:3", cssValue: "4 / 3" },
-    { value: "fill", label: "Fill", cssValue: "" },
+    { value: "fill-h", label: "Fill H", cssValue: "" },
+    { value: "fill-v", label: "Fill V", cssValue: "" },
   ];
+  const COMPRESSOR_PRESETS = Object.freeze({
+    soft: Object.freeze({
+      label: "Soft",
+      settings: Object.freeze({ threshold: -22, knee: 18, ratio: 1.5, attack: 0.08, release: 0.24, outputGain: 1.02 }),
+    }),
+    night: Object.freeze({
+      label: "Night",
+      settings: Object.freeze({ threshold: -30, knee: 26, ratio: 2.6, attack: 0.05, release: 0.32, outputGain: 1.1 }),
+    }),
+    voice_boost: Object.freeze({
+      label: "Voice Boost",
+      settings: Object.freeze({ threshold: -26, knee: 22, ratio: 2, attack: 0.06, release: 0.24, outputGain: 1.08 }),
+    }),
+    strong: Object.freeze({
+      label: "Strong",
+      settings: Object.freeze({ threshold: -34, knee: 30, ratio: 3.5, attack: 0.04, release: 0.34, outputGain: 1.14 }),
+    }),
+    custom: Object.freeze({
+      label: "Custom",
+      settings: null,
+    }),
+  });
+  const DEFAULT_COMPRESSOR_PRESET = "soft";
+  const COMPRESSOR_PARAMETER_SCHEMA = Object.freeze({
+    threshold: Object.freeze({
+      label: "Threshold",
+      description: "Порог начала компрессии",
+      min: -100,
+      max: 0,
+      step: 1,
+      defaultValue: -22,
+      formatValue: (value) => `${Math.round(value)} dB`,
+    }),
+    knee: Object.freeze({
+      label: "Knee",
+      description: "Плавность входа в компрессию",
+      min: 0,
+      max: 40,
+      step: 1,
+      defaultValue: 18,
+      formatValue: (value) => `${Math.round(value)} dB`,
+    }),
+    ratio: Object.freeze({
+      label: "Ratio",
+      description: "Сила сжатия громкости",
+      min: 1,
+      max: 20,
+      step: 0.1,
+      defaultValue: 1.5,
+      formatValue: (value) => `${Number(value).toFixed(1).replace(/\.0$/, "")}:1`,
+    }),
+    attack: Object.freeze({
+      label: "Attack",
+      description: "Скорость начала сжатия",
+      min: 0,
+      max: 1,
+      step: 0.01,
+      defaultValue: 0.08,
+      formatValue: (value) => `${Number(value).toFixed(2).replace(/0+$/, "").replace(/\.$/, "") || "0"} с`,
+    }),
+    release: Object.freeze({
+      label: "Release",
+      description: "Скорость восстановления уровня",
+      min: 0,
+      max: 1,
+      step: 0.01,
+      defaultValue: 0.24,
+      formatValue: (value) => `${Number(value).toFixed(2).replace(/0+$/, "").replace(/\.$/, "") || "0"} с`,
+    }),
+    outputGain: Object.freeze({
+      label: "Output Gain",
+      description: "Компенсация громкости после компрессии",
+      min: 0.5,
+      max: 2,
+      step: 0.05,
+      defaultValue: 1.02,
+      formatValue: (value) => `${Number(value).toFixed(2).replace(/0+$/, "").replace(/\.$/, "") || "1"}x`,
+    }),
+  });
   const SELECTORS = {
     mainContainer: ".mainContainer",
     telegramLink: ".tgMain[href], .tgMain a[href]",
@@ -26,6 +114,7 @@
   let audioCompressor;
   let videoEffects;
   let aspectRatioSelector;
+  let embeddedPlayerCore;
 
 function hideElements() {
   for (const selector of HIDDEN_SELECTORS) {
@@ -210,7 +299,156 @@ function findOwnerIframeForDocument(targetDocument, mainContainer) {
 }
 
 function getAspectRatioOption(value) {
+  if (value === "fill") {
+    return ASPECT_RATIO_OPTIONS.find((option) => option.value === "fill-h") || ASPECT_RATIO_OPTIONS[0];
+  }
+
   return ASPECT_RATIO_OPTIONS.find((option) => option.value === value) || ASPECT_RATIO_OPTIONS[0];
+}
+
+function getCurrentVideoElement(root = document) {
+  return root.querySelector("video");
+}
+
+function isCompressorApiSupported() {
+  return !!(
+    (window.AudioContext || window.webkitAudioContext) &&
+    window.MediaElementAudioSourceNode &&
+    window.DynamicsCompressorNode &&
+    window.GainNode
+  );
+}
+
+function disconnectAudioNode(node, target) {
+  try {
+    node?.disconnect(target);
+  } catch (error) {
+    // Audio graph nodes can already be disconnected after player swaps.
+  }
+}
+
+function clampNumber(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function roundToStep(value, step) {
+  return step ? Math.round(value / step) * step : value;
+}
+
+function getDefaultCompressorSettings() {
+  return { ...(COMPRESSOR_PRESETS[DEFAULT_COMPRESSOR_PRESET]?.settings || {}) };
+}
+
+function normalizeCompressorSettings(rawValue) {
+  const defaults = getDefaultCompressorSettings();
+  const source = rawValue && typeof rawValue === "object" ? rawValue : {};
+
+  return Object.fromEntries(
+    Object.entries(COMPRESSOR_PARAMETER_SCHEMA).map(([key, schema]) => {
+      const rawNumber = Number(source[key]);
+      const fallbackValue = defaults[key] ?? schema.defaultValue;
+      const normalizedValue = Number.isFinite(rawNumber) ? rawNumber : fallbackValue;
+      const steppedValue = roundToStep(normalizedValue, schema.step);
+      return [key, clampNumber(steppedValue, schema.min, schema.max)];
+    }),
+  );
+}
+
+function areCompressorSettingsEqual(left, right) {
+  const normalizedLeft = normalizeCompressorSettings(left);
+  const normalizedRight = normalizeCompressorSettings(right);
+  return Object.keys(COMPRESSOR_PARAMETER_SCHEMA).every((key) => normalizedLeft[key] === normalizedRight[key]);
+}
+
+function detectCompressorPreset(settings) {
+  const normalizedSettings = normalizeCompressorSettings(settings);
+  const presetEntry = Object.entries(COMPRESSOR_PRESETS).find(([presetKey, preset]) => (
+    presetKey !== "custom"
+    && preset.settings
+    && areCompressorSettingsEqual(normalizedSettings, preset.settings)
+  ));
+
+  return presetEntry ? presetEntry[0] : "custom";
+}
+
+function normalizeCompressorPreset(value) {
+  return Object.prototype.hasOwnProperty.call(COMPRESSOR_PRESETS, value) ? value : DEFAULT_COMPRESSOR_PRESET;
+}
+
+function normalizeCompressorState(rawValue) {
+  if (!rawValue || typeof rawValue !== "object" || Array.isArray(rawValue)) {
+    const settings = normalizeCompressorSettings(rawValue);
+    return {
+      preset: detectCompressorPreset(settings),
+      advancedMode: false,
+      settings,
+    };
+  }
+
+  const rawSettings = rawValue.settings && typeof rawValue.settings === "object" ? rawValue.settings : rawValue;
+  const settings = normalizeCompressorSettings(rawSettings);
+  const requestedPreset = normalizeCompressorPreset(rawValue.preset);
+  const preset = requestedPreset === "custom"
+    ? "custom"
+    : (areCompressorSettingsEqual(settings, COMPRESSOR_PRESETS[requestedPreset].settings)
+      ? requestedPreset
+      : detectCompressorPreset(settings));
+
+  return {
+    preset,
+    advancedMode: !!rawValue.advancedMode,
+    settings,
+  };
+}
+
+function bindPopupClickToggle(wrapper, trigger, popup) {
+  if (!wrapper || !trigger || !popup) {
+    return { close() {} };
+  }
+
+  const openClass = "kinopoisk-enhanced-core-popup-open";
+  const triggerOpenClass = "kinopoisk-enhanced-core-popup-trigger-open";
+  const close = () => {
+    wrapper.classList.remove(openClass);
+    trigger.classList.remove(triggerOpenClass);
+    trigger.setAttribute("aria-expanded", "false");
+  };
+  const open = () => {
+    document.querySelectorAll(`.${openClass}`).forEach((node) => {
+      if (node !== wrapper) {
+        node.classList.remove(openClass);
+        node.querySelector(".kinopoisk-enhanced-core-popup-trigger-open")?.classList.remove(triggerOpenClass);
+      }
+    });
+    wrapper.classList.add(openClass);
+    trigger.classList.add(triggerOpenClass);
+    trigger.setAttribute("aria-expanded", "true");
+  };
+
+  trigger.setAttribute("aria-haspopup", "dialog");
+  trigger.setAttribute("aria-expanded", "false");
+  trigger.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (wrapper.classList.contains(openClass)) {
+      close();
+      return;
+    }
+    open();
+  });
+  popup.addEventListener("click", (event) => event.stopPropagation());
+  document.addEventListener("click", (event) => {
+    if (!wrapper.contains(event.target)) {
+      close();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      close();
+    }
+  });
+
+  return { close };
 }
 
 class MediaTargetTracker {
@@ -341,8 +579,13 @@ class VideoEffects {
     this.blurEnabled = storageGet("video-blur-enabled", false);
     this.mirrorEnabled = storageGet("video-mirror-enabled", false);
     this.target = null;
+    this.remoteWindow = null;
+    this.remoteAvailable = false;
+    this.remoteStatus = "idle";
     this.blurButton = null;
     this.mirrorButton = null;
+    this.messageHandler = (event) => this.handleBridgeMessage(event);
+    window.addEventListener("message", this.messageHandler);
     tracker.subscribe((target, mainContainer, previousTarget) => this.setTarget(target, mainContainer, previousTarget));
   }
 
@@ -375,8 +618,57 @@ class VideoEffects {
     );
     this.target = target;
     this.frame = findMediaFrame(target, mainContainer);
+    this.setRemoteTarget(target instanceof HTMLIFrameElement ? target : null);
     this.apply();
     this.updateButtons();
+  }
+
+  setRemoteTarget(iframe) {
+    const nextWindow = iframe?.contentWindow || null;
+    if (nextWindow === this.remoteWindow) {
+      return;
+    }
+
+    this.remoteWindow = nextWindow;
+    this.remoteAvailable = false;
+    this.remoteStatus = nextWindow ? "waiting" : "idle";
+
+    if (this.remoteWindow) {
+      this.sendBridgeCommand("set-video-effects");
+    }
+  }
+
+  handleBridgeMessage(event) {
+    if (!this.remoteWindow || event.source !== this.remoteWindow) {
+      return;
+    }
+
+    const data = event.data;
+    if (!data || data.appId !== BRIDGE_APP_ID || data.type !== BRIDGE_EFFECTS_STATUS_TYPE) {
+      return;
+    }
+
+    this.remoteAvailable = !!data.available;
+    this.remoteStatus = data.status || (this.remoteAvailable ? "ready" : "unavailable");
+    this.updateButtons();
+  }
+
+  sendBridgeCommand(command) {
+    if (!this.remoteWindow) {
+      return;
+    }
+
+    this.remoteWindow.postMessage({
+      appId: BRIDGE_APP_ID,
+      type: BRIDGE_EFFECTS_COMMAND_TYPE,
+      command,
+      blurEnabled: this.blurEnabled,
+      mirrorEnabled: this.mirrorEnabled,
+    }, "*");
+  }
+
+  isRemoteMode() {
+    return this.target instanceof HTMLIFrameElement && !!this.remoteWindow;
   }
 
   toggleBlur() {
@@ -398,6 +690,19 @@ class VideoEffects {
       return;
     }
 
+    if (this.isRemoteMode()) {
+      this.target.classList.remove(
+        "kinopoisk-enhanced-core-media--blur",
+        "kinopoisk-enhanced-core-media--mirror",
+      );
+      this.frame?.classList.remove(
+        "kinopoisk-enhanced-core-media--blur",
+        "kinopoisk-enhanced-core-media--mirror",
+      );
+      this.sendBridgeCommand("set-video-effects");
+      return;
+    }
+
     const visualTarget = this.frame || this.target;
 
     this.target.classList.toggle("kinopoisk-enhanced-core-media--blur", this.blurEnabled && !this.frame);
@@ -408,16 +713,17 @@ class VideoEffects {
 
   updateButtons() {
     const hasTarget = !!this.target;
+    const remoteSuffix = this.remoteWindow ? ` (${this.remoteStatus})` : "";
     if (this.blurButton) {
       this.blurButton.disabled = !hasTarget;
       this.blurButton.classList.toggle("kinopoisk-enhanced-core-footer__button--active", this.blurEnabled);
-      this.blurButton.title = `Размытие видео: ${this.blurEnabled ? "вкл" : "выкл"}`;
+      this.blurButton.title = `Размытие видео: ${this.blurEnabled ? "вкл" : "выкл"}${remoteSuffix}`;
     }
 
     if (this.mirrorButton) {
       this.mirrorButton.disabled = !hasTarget;
       this.mirrorButton.classList.toggle("kinopoisk-enhanced-core-footer__button--active", this.mirrorEnabled);
-      this.mirrorButton.title = `Зеркало видео: ${this.mirrorEnabled ? "вкл" : "выкл"}`;
+      this.mirrorButton.title = `Зеркало видео: ${this.mirrorEnabled ? "вкл" : "выкл"}${remoteSuffix}`;
     }
   }
 }
@@ -428,7 +734,12 @@ class AspectRatioSelector {
     this.target = null;
     this.frame = null;
     this.mainContainer = null;
+    this.remoteWindow = null;
+    this.remoteAvailable = false;
+    this.remoteStatus = "idle";
     this.button = null;
+    this.messageHandler = (event) => this.handleBridgeMessage(event);
+    window.addEventListener("message", this.messageHandler);
     tracker.subscribe((target, mainContainer, previousTarget) => this.setTarget(target, mainContainer, previousTarget));
   }
 
@@ -448,8 +759,58 @@ class AspectRatioSelector {
     this.target = target;
     this.frame = findMediaFrame(target, mainContainer);
     this.mainContainer = mainContainer;
+    this.setRemoteTarget(target instanceof HTMLIFrameElement ? target : null);
     this.apply();
     this.updateButton();
+  }
+
+  setRemoteTarget(iframe) {
+    const nextWindow = iframe?.contentWindow || null;
+    if (nextWindow === this.remoteWindow) {
+      return;
+    }
+
+    this.remoteWindow = nextWindow;
+    this.remoteAvailable = false;
+    this.remoteStatus = nextWindow ? "waiting" : "idle";
+
+    if (this.remoteWindow) {
+      this.sendBridgeCommand();
+    }
+  }
+
+  handleBridgeMessage(event) {
+    if (!this.remoteWindow || event.source !== this.remoteWindow) {
+      return;
+    }
+
+    const data = event.data;
+    if (!data || data.appId !== BRIDGE_APP_ID || data.type !== BRIDGE_ASPECT_STATUS_TYPE) {
+      return;
+    }
+
+    this.remoteAvailable = !!data.available;
+    this.remoteStatus = data.status || (this.remoteAvailable ? "ready" : "unavailable");
+    this.updateButton();
+  }
+
+  sendBridgeCommand() {
+    if (!this.remoteWindow) {
+      return;
+    }
+
+    const option = getAspectRatioOption(this.mode);
+    this.remoteWindow.postMessage({
+      appId: BRIDGE_APP_ID,
+      type: BRIDGE_ASPECT_COMMAND_TYPE,
+      command: "set-aspect-ratio",
+      mode: option.value,
+      cssValue: option.cssValue,
+    }, "*");
+  }
+
+  isRemoteMode() {
+    return this.target instanceof HTMLIFrameElement && !!this.remoteWindow;
   }
 
   nextMode() {
@@ -465,7 +826,8 @@ class AspectRatioSelector {
     for (const element of [target, frame].filter(Boolean)) {
       element.classList.remove(
         "kinopoisk-enhanced-core-media--aspect-managed",
-        "kinopoisk-enhanced-core-media--aspect-fill",
+        "kinopoisk-enhanced-core-media--aspect-fill-h",
+        "kinopoisk-enhanced-core-media--aspect-fill-v",
         "kinopoisk-enhanced-core-media-frame",
       );
       element.style.removeProperty("--kinopoisk-enhanced-core-player-aspect-ratio");
@@ -481,17 +843,30 @@ class AspectRatioSelector {
     const frame = this.frame || this.target;
     this.cleanupTarget(this.target, frame);
 
+    if (this.isRemoteMode()) {
+      this.sendBridgeCommand();
+      this.mainContainer?.classList.toggle("kinopoisk-enhanced-core-main--fill-media", option.value.startsWith("fill-"));
+      return;
+    }
+
     frame.classList.add("kinopoisk-enhanced-core-media-frame");
-    frame.style.setProperty("--kinopoisk-enhanced-core-player-aspect-ratio", option.cssValue || "16 / 9");
     this.target?.classList.add("kinopoisk-enhanced-core-media--aspect-managed");
 
-    if (option.value === "fill") {
-      frame.classList.add("kinopoisk-enhanced-core-media--aspect-fill");
-      this.target?.classList.add("kinopoisk-enhanced-core-media--aspect-fill");
+    if (option.value === "fill-h") {
+      frame.classList.add("kinopoisk-enhanced-core-media--aspect-fill-h");
+      this.target?.classList.add("kinopoisk-enhanced-core-media--aspect-fill-h");
       this.mainContainer?.classList.add("kinopoisk-enhanced-core-main--fill-media");
       return;
     }
 
+    if (option.value === "fill-v") {
+      frame.classList.add("kinopoisk-enhanced-core-media--aspect-fill-v");
+      this.target?.classList.add("kinopoisk-enhanced-core-media--aspect-fill-v");
+      this.mainContainer?.classList.add("kinopoisk-enhanced-core-main--fill-media");
+      return;
+    }
+
+    frame.style.setProperty("--kinopoisk-enhanced-core-player-aspect-ratio", option.cssValue || "16 / 9");
     this.mainContainer?.classList.remove("kinopoisk-enhanced-core-main--fill-media");
   }
 
@@ -504,27 +879,60 @@ class AspectRatioSelector {
     this.button.disabled = !this.target && !this.frame;
     this.button.textContent = option.label;
     this.button.classList.add("kinopoisk-enhanced-core-footer__button--active");
-    this.button.title = `Соотношение сторон: ${option.label}`;
+    this.button.title = `Соотношение сторон: ${option.label}${this.remoteWindow ? ` (${this.remoteStatus})` : ""}`;
   }
 }
 
 class AudioCompressor {
   constructor(tracker) {
     this.enabled = storageGet("audio-compressor-enabled", false);
+    const normalizedState = normalizeCompressorState(storageGet("audio-compressor-settings-v1", {
+      preset: DEFAULT_COMPRESSOR_PRESET,
+      advancedMode: false,
+      settings: getDefaultCompressorSettings(),
+    }));
+    this.settings = normalizedState.settings;
+    this.preset = normalizedState.preset;
+    this.advancedMode = normalizedState.advancedMode;
     this.target = null;
+    this.remoteWindow = null;
+    this.remoteAvailable = false;
+    this.remoteStatus = "idle";
+    this.remoteMessage = "";
     this.state = null;
     this.button = null;
+    this.popup = null;
+    this.settingsInputs = {};
+    this.settingsValueNodes = {};
+    this.presetButtons = {};
+    this.toggleButton = null;
+    this.advancedModeInput = null;
+    this.controlsNode = null;
+    this.statusNode = null;
+    this.meterNode = null;
+    this.messageHandler = (event) => this.handleBridgeMessage(event);
+    window.addEventListener("message", this.messageHandler);
     tracker.subscribe((target) => this.setTarget(target instanceof HTMLVideoElement ? target : null));
+    tracker.subscribe((target) => this.setRemoteTarget(target instanceof HTMLIFrameElement ? target : null));
   }
 
   mount(parent) {
+    if (this.button?.isConnected) {
+      return;
+    }
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "kinopoisk-enhanced-core-compressor-wrap";
+    this.popup = this.createSettingsPopup();
     this.button = createControlButton({
-      className: "kinopoisk-enhanced-core-footer__button--icon",
+      className: "kinopoisk-enhanced-core-footer__button--icon kinopoisk-enhanced-core-footer__button--compressor",
       label: "Comp",
       title: "Аудио-компрессор: выкл",
-      onClick: () => this.toggle(true),
+      onClick: () => {},
     });
-    parent.append(this.button);
+    wrapper.append(this.popup, this.button);
+    parent.append(wrapper);
+    bindPopupClickToggle(wrapper, this.button, this.popup);
     this.updateButton();
   }
 
@@ -544,13 +952,65 @@ class AudioCompressor {
     this.updateButton();
   }
 
+  setRemoteTarget(iframe) {
+    const nextWindow = iframe?.contentWindow || null;
+    if (nextWindow === this.remoteWindow) {
+      return;
+    }
+
+    this.remoteWindow = nextWindow;
+    this.remoteAvailable = false;
+    this.remoteStatus = nextWindow ? "waiting" : "idle";
+
+    if (this.remoteWindow) {
+      this.sendBridgeCommand({ command: "ping", enabled: this.enabled, settings: this.settings });
+    }
+
+    this.updateButton();
+  }
+
+  handleBridgeMessage(event) {
+    if (!this.remoteWindow || event.source !== this.remoteWindow) {
+      return;
+    }
+
+    const data = event.data;
+    if (!data || data.appId !== BRIDGE_APP_ID || data.type !== BRIDGE_STATUS_TYPE) {
+      return;
+    }
+
+    this.remoteAvailable = !!data.available;
+    this.remoteStatus = data.status || (this.remoteAvailable ? "ready" : "unavailable");
+    this.remoteMessage = data.message || "";
+
+    if (typeof data.enabled === "boolean") {
+      this.enabled = data.enabled;
+      storageSet("audio-compressor-enabled", this.enabled);
+    }
+
+    this.updateButton();
+  }
+
+  sendBridgeCommand(payload) {
+    if (!this.remoteWindow) {
+      return;
+    }
+
+    this.remoteWindow.postMessage({
+      appId: BRIDGE_APP_ID,
+      type: BRIDGE_COMMAND_TYPE,
+      ...payload,
+    }, "*");
+  }
+
+  isRemoteMode() {
+    return !!this.remoteWindow && !this.target;
+  }
+
   isSupported() {
     return !!(
       this.target &&
-      (window.AudioContext || window.webkitAudioContext) &&
-      window.MediaElementAudioSourceNode &&
-      window.DynamicsCompressorNode &&
-      window.GainNode
+      isCompressorApiSupported()
     );
   }
 
@@ -560,20 +1020,7 @@ class AudioCompressor {
     }
 
     try {
-      const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
-      const context = new AudioContextCtor();
-      const source = new MediaElementAudioSourceNode(context, { mediaElement: this.target });
-      const compressor = new DynamicsCompressorNode(context, {
-        threshold: -28,
-        knee: 24,
-        ratio: 4,
-        attack: 0.006,
-        release: 0.22,
-      });
-      const gain = new GainNode(context, { gain: 1.08 });
-
-      source.connect(context.destination);
-      this.state = { context, source, compressor, gain, active: false };
+      this.state = createCompressorState(this.target, this.settings);
     } catch (error) {
       console.warn("[Kinopoisk Enhanced] audio compressor unavailable for this video", error);
       this.enabled = false;
@@ -584,27 +1031,271 @@ class AudioCompressor {
     return this.state;
   }
 
+  saveCompressorState(nextSettings = this.settings, nextPreset = this.preset) {
+    this.settings = normalizeCompressorSettings(nextSettings);
+    this.preset = normalizeCompressorPreset(nextPreset);
+    storageSet("audio-compressor-settings-v1", {
+      preset: this.preset,
+      advancedMode: this.advancedMode,
+      settings: this.settings,
+    });
+  }
+
+  formatParameterValue(key, value) {
+    const schema = COMPRESSOR_PARAMETER_SCHEMA[key];
+    return schema?.formatValue ? schema.formatValue(value) : String(value);
+  }
+
+  getCompressionIntensityLabel() {
+    const ratio = Number(this.settings.ratio);
+    const threshold = Number(this.settings.threshold);
+
+    if (ratio <= 1.5 || threshold >= -18) {
+      return "Без компрессии";
+    }
+    if (ratio <= 3 || threshold >= -30) {
+      return "Мягкая компрессия";
+    }
+    if (ratio <= 6 || threshold >= -42) {
+      return "Умеренная компрессия";
+    }
+    if (ratio <= 10 || threshold >= -54) {
+      return "Агрессивная компрессия";
+    }
+    return "Почти лимитер";
+  }
+
+  getStatusText() {
+    if (this.remoteWindow) {
+      return this.remoteMessage || `iframe: ${this.remoteStatus}`;
+    }
+    if (!this.target) {
+      return "Видео еще не найдено. Настройки сохранятся и применятся позже.";
+    }
+    if (!isCompressorApiSupported()) {
+      return "Браузер не поддерживает AudioContext или компрессор.";
+    }
+    if (this.enabled && this.state?.context?.state === "suspended") {
+      return "Нужен user gesture: клик по плееру или повторное включение компрессора.";
+    }
+    return "Настройки применяются к текущему видео сразу.";
+  }
+
+  createSettingsPopup() {
+    const popup = document.createElement("div");
+    popup.className = "kinopoisk-enhanced-core-compressor-popup";
+
+    const title = document.createElement("span");
+    title.className = "kinopoisk-enhanced-core-compressor-popup__title";
+    title.textContent = "Компрессор";
+    popup.append(title);
+
+    this.statusNode = document.createElement("div");
+    this.statusNode.className = "kinopoisk-enhanced-core-compressor-popup__status";
+    popup.append(this.statusNode);
+
+    this.meterNode = document.createElement("div");
+    this.meterNode.className = "kinopoisk-enhanced-core-compressor-popup__meter";
+    popup.append(this.meterNode);
+
+    const presets = document.createElement("div");
+    presets.className = "kinopoisk-enhanced-core-compressor-popup__presets";
+    Object.entries(COMPRESSOR_PRESETS).forEach(([presetKey, preset]) => {
+      const presetButton = document.createElement("button");
+      presetButton.type = "button";
+      presetButton.className = "kinopoisk-enhanced-core-compressor-popup__preset";
+      presetButton.textContent = preset.label;
+      presetButton.addEventListener("click", () => this.applyPreset(presetKey));
+      this.presetButtons[presetKey] = presetButton;
+      presets.append(presetButton);
+    });
+    popup.append(presets);
+
+    const advancedLabel = document.createElement("label");
+    advancedLabel.className = "kinopoisk-enhanced-core-compressor-popup__advanced";
+    this.advancedModeInput = document.createElement("input");
+    this.advancedModeInput.type = "checkbox";
+    this.advancedModeInput.checked = this.advancedMode;
+    this.advancedModeInput.addEventListener("change", () => this.setAdvancedMode(this.advancedModeInput.checked));
+    const advancedText = document.createElement("span");
+    advancedText.textContent = "Расширенный режим";
+    advancedLabel.append(this.advancedModeInput, advancedText);
+    popup.append(advancedLabel);
+
+    this.controlsNode = document.createElement("div");
+    this.controlsNode.className = "kinopoisk-enhanced-core-compressor-popup__controls";
+    Object.entries(COMPRESSOR_PARAMETER_SCHEMA).forEach(([key, schema]) => {
+      this.controlsNode.append(this.createParameterControl(key, schema));
+    });
+    popup.append(this.controlsNode);
+
+    const footer = document.createElement("div");
+    footer.className = "kinopoisk-enhanced-core-compressor-popup__footer";
+    this.toggleButton = document.createElement("button");
+    this.toggleButton.type = "button";
+    this.toggleButton.className = "kinopoisk-enhanced-core-compressor-popup__toggle";
+    this.toggleButton.addEventListener("click", () => this.setEnabled(!this.enabled, true));
+    const resetButton = document.createElement("button");
+    resetButton.type = "button";
+    resetButton.className = "kinopoisk-enhanced-core-compressor-popup__reset";
+    resetButton.textContent = "Сбросить";
+    resetButton.addEventListener("click", () => this.resetSettings());
+    footer.append(this.toggleButton, resetButton);
+    popup.append(footer);
+
+    this.updatePopupState();
+    return popup;
+  }
+
+  createParameterControl(key, schema) {
+    const row = document.createElement("div");
+    row.className = "kinopoisk-enhanced-core-compressor-popup__row";
+    const head = document.createElement("div");
+    head.className = "kinopoisk-enhanced-core-compressor-popup__row-head";
+    const labelWrap = document.createElement("div");
+    labelWrap.className = "kinopoisk-enhanced-core-compressor-popup__label-wrap";
+    const label = document.createElement("span");
+    label.className = "kinopoisk-enhanced-core-compressor-popup__label";
+    label.textContent = schema.label;
+    labelWrap.append(label);
+    if (schema.description) {
+      const hint = document.createElement("span");
+      hint.className = "kinopoisk-enhanced-core-compressor-popup__hint";
+      hint.dataset.hint = schema.description;
+      hint.tabIndex = 0;
+      labelWrap.append(hint);
+    }
+    const value = document.createElement("span");
+    value.className = "kinopoisk-enhanced-core-compressor-popup__value";
+    this.settingsValueNodes[key] = value;
+    head.append(labelWrap, value);
+    const input = document.createElement("input");
+    input.type = "range";
+    input.className = "kinopoisk-enhanced-core-compressor-popup__slider";
+    input.min = String(schema.min);
+    input.max = String(schema.max);
+    input.step = String(schema.step);
+    input.value = String(this.settings[key]);
+    input.addEventListener("input", () => this.updateSettings({ [key]: Number(input.value) }));
+    this.settingsInputs[key] = input;
+    row.append(head, input);
+    return row;
+  }
+
+  updateParameterControlValue(key) {
+    const input = this.settingsInputs[key];
+    const valueNode = this.settingsValueNodes[key];
+    if (!input || !valueNode) {
+      return;
+    }
+    input.value = String(this.settings[key]);
+    valueNode.textContent = this.formatParameterValue(key, this.settings[key]);
+  }
+
+  renderMeterSummary() {
+    if (!this.meterNode) {
+      return;
+    }
+    const presetLabel = COMPRESSOR_PRESETS[this.preset]?.label || COMPRESSOR_PRESETS.custom.label;
+    const rows = [
+      ["Preset", presetLabel],
+      ["Профиль", this.getCompressionIntensityLabel()],
+      ["Threshold", this.formatParameterValue("threshold", this.settings.threshold)],
+      ["Output Gain", this.formatParameterValue("outputGain", this.settings.outputGain)],
+    ];
+    this.meterNode.replaceChildren(...rows.map(([label, value]) => {
+      const line = document.createElement("div");
+      line.className = "kinopoisk-enhanced-core-compressor-popup__meter-line";
+      const labelNode = document.createElement("span");
+      labelNode.className = "kinopoisk-enhanced-core-compressor-popup__meter-label";
+      labelNode.textContent = label;
+      const valueNode = document.createElement("span");
+      valueNode.className = "kinopoisk-enhanced-core-compressor-popup__meter-value";
+      valueNode.textContent = value;
+      line.append(labelNode, valueNode);
+      return line;
+    }));
+  }
+
+  updatePopupState() {
+    Object.entries(this.presetButtons).forEach(([presetKey, button]) => {
+      button.classList.toggle("kinopoisk-enhanced-core-popup-active", presetKey === this.preset);
+    });
+    if (this.advancedModeInput) {
+      this.advancedModeInput.checked = this.advancedMode;
+    }
+    if (this.controlsNode) {
+      this.controlsNode.hidden = !this.advancedMode;
+    }
+    Object.keys(COMPRESSOR_PARAMETER_SCHEMA).forEach((key) => this.updateParameterControlValue(key));
+    this.renderMeterSummary();
+    if (this.statusNode) {
+      this.statusNode.textContent = this.getStatusText();
+    }
+    if (this.toggleButton) {
+      this.toggleButton.classList.toggle("kinopoisk-enhanced-core-popup-active", this.enabled);
+      this.toggleButton.textContent = this.enabled ? "Выключить компрессор" : "Включить компрессор";
+    }
+  }
+
+  setAdvancedMode(enabled) {
+    this.advancedMode = !!enabled;
+    this.saveCompressorState(this.settings, this.preset);
+    this.updateButton();
+  }
+
+  updateSettings(partialSettings, source = "manual") {
+    const nextSettings = { ...this.settings, ...partialSettings };
+    const nextPreset = source === "manual" ? "custom" : this.preset;
+    this.saveCompressorState(nextSettings, nextPreset);
+    if (this.state) {
+      applyCompressorSettingsToState(this.state, this.settings);
+    }
+    if (this.remoteWindow) {
+      this.sendBridgeCommand({ command: "set-settings", settings: this.settings, preset: this.preset, advancedMode: this.advancedMode });
+    }
+    this.updateButton();
+  }
+
+  applyPreset(presetKey) {
+    const preset = COMPRESSOR_PRESETS[presetKey];
+    if (!preset) {
+      return;
+    }
+    if (presetKey === "custom") {
+      this.saveCompressorState(this.settings, "custom");
+      this.updateButton();
+      return;
+    }
+    this.saveCompressorState(preset.settings, presetKey);
+    this.updateSettings(this.settings, "preset");
+  }
+
+  resetSettings() {
+    this.saveCompressorState(getDefaultCompressorSettings(), DEFAULT_COMPRESSOR_PRESET);
+    this.updateSettings(this.settings, "preset");
+  }
+
   disconnectNodes() {
     if (!this.state) {
       return;
     }
 
-    for (const [node, target] of [
+    [
       [this.state.source, this.state.context.destination],
       [this.state.source, this.state.compressor],
       [this.state.compressor, this.state.gain],
       [this.state.gain, this.state.context.destination],
-    ]) {
-      try {
-        node.disconnect(target);
-      } catch (error) {
-        // Nodes can legitimately be disconnected already after player swaps.
-      }
-    }
+    ].forEach(([node, target]) => disconnectAudioNode(node, target));
   }
 
   async apply(fromUserGesture = false) {
-    const state = this.ensureState();
+    if (!this.enabled && !this.state) {
+      this.updateButton();
+      return;
+    }
+
+    const state = this.enabled ? this.ensureState() : this.state;
     if (!state) {
       this.updateButton();
       return;
@@ -648,8 +1339,19 @@ class AudioCompressor {
   }
 
   toggle(fromUserGesture = false) {
-    this.enabled = !this.enabled;
+    this.setEnabled(!this.enabled, fromUserGesture);
+  }
+
+  setEnabled(enabled, fromUserGesture = false) {
+    this.enabled = !!enabled;
     storageSet("audio-compressor-enabled", this.enabled);
+
+    if (this.isRemoteMode()) {
+      this.sendBridgeCommand({ command: "set-enabled", enabled: this.enabled, fromUserGesture, settings: this.settings });
+      this.updateButton();
+      return;
+    }
+
     void this.apply(fromUserGesture);
     this.updateButton();
   }
@@ -659,12 +1361,510 @@ class AudioCompressor {
       return;
     }
 
-    const available = this.isSupported() || !!this.state;
+    const available = this.isSupported() || !!this.state || this.remoteAvailable;
     this.button.disabled = !available;
     this.button.classList.toggle("kinopoisk-enhanced-core-footer__button--active", this.enabled);
-    this.button.title = available
-      ? `Аудио-компрессор: ${this.enabled ? "вкл" : "выкл"}`
+    this.button.title = this.remoteWindow && !this.remoteAvailable
+      ? "Аудио-компрессор: ожидаем доступный video внутри iframe"
+      : available
+        ? `Аудио-компрессор: ${this.enabled ? "вкл" : "выкл"}${this.remoteWindow ? ` (${this.remoteStatus})` : ""}`
       : "Аудио-компрессор доступен только для video в текущем документе";
+    this.updatePopupState();
+  }
+}
+
+function applyCompressorSettingsToState(state, settings) {
+  const normalizedSettings = normalizeCompressorSettings(settings);
+  Object.entries(normalizedSettings).forEach(([key, value]) => {
+    if (key === "outputGain") {
+      if (state.gain?.gain && typeof state.gain.gain.value === "number") {
+        state.gain.gain.value = value;
+      }
+      return;
+    }
+
+    const param = state.compressor?.[key];
+    if (param && typeof param.value === "number") {
+      param.value = value;
+    }
+  });
+}
+
+function createCompressorState(video, settings = getDefaultCompressorSettings()) {
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  const context = new AudioContextCtor();
+  const source = new MediaElementAudioSourceNode(context, { mediaElement: video });
+  const compressor = new DynamicsCompressorNode(context);
+  const gain = new GainNode(context);
+
+  const state = { context, source, compressor, gain, active: false };
+  applyCompressorSettingsToState(state, settings);
+  return state;
+}
+
+class EmbeddedPlayerCore {
+  constructor(context = {}) {
+    this.context = context;
+    this.enabled = AUDIO_COMPRESSOR_ENABLED && storageGet("audio-compressor-enabled", false);
+    this.settings = normalizeCompressorState(storageGet("audio-compressor-settings-v1", {
+      preset: DEFAULT_COMPRESSOR_PRESET,
+      advancedMode: false,
+      settings: getDefaultCompressorSettings(),
+    })).settings;
+    this.blurEnabled = storageGet("video-blur-enabled", false);
+    this.mirrorEnabled = storageGet("video-mirror-enabled", false);
+    this.aspectRatioMode = getAspectRatioOption(storageGet("aspect-ratio-mode", "native")).value;
+    this.video = null;
+    this.state = null;
+    this.observer = null;
+    this.syncTimer = null;
+    this.initialized = false;
+    this.messageHandler = (event) => this.handleMessage(event);
+    this.videoEventHandler = () => {
+      if (this.enabled) {
+        void this.apply(true);
+      }
+      this.postStatus();
+    };
+  }
+
+  init() {
+    if (this.initialized) {
+      this.scheduleSync();
+      return;
+    }
+
+    this.initialized = true;
+    window.addEventListener("message", this.messageHandler);
+    this.ensureObserver();
+    this.sync();
+    this.postStatus();
+  }
+
+  ensureObserver() {
+    if (this.observer || !document.documentElement) {
+      return;
+    }
+
+    this.observer = new MutationObserver(() => this.scheduleSync());
+    this.observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+    });
+  }
+
+  scheduleSync() {
+    if (this.syncTimer) {
+      return;
+    }
+
+    this.syncTimer = window.setTimeout(() => {
+      this.syncTimer = null;
+      this.sync();
+    }, 120);
+  }
+
+  sync() {
+    const nextVideo = getCurrentVideoElement(document);
+    if (nextVideo === this.video) {
+      this.postStatus();
+      this.postEffectsStatus();
+      return;
+    }
+
+    this.clearVideoEffects();
+    this.clearAspectRatio();
+    this.unbindVideo();
+    this.disconnect();
+    this.video = nextVideo;
+    this.bindVideo();
+    this.applyVideoEffects();
+    this.applyAspectRatio();
+
+    if (this.enabled) {
+      void this.apply(false);
+    }
+
+    this.postStatus();
+    this.postEffectsStatus();
+    this.postAspectRatioStatus();
+  }
+
+  bindVideo() {
+    if (!this.video) {
+      return;
+    }
+
+    this.video.addEventListener("play", this.videoEventHandler);
+    this.video.addEventListener("canplay", this.videoEventHandler);
+    this.video.addEventListener("loadedmetadata", this.videoEventHandler);
+  }
+
+  unbindVideo() {
+    if (!this.video) {
+      return;
+    }
+
+    this.video.removeEventListener("play", this.videoEventHandler);
+    this.video.removeEventListener("canplay", this.videoEventHandler);
+    this.video.removeEventListener("loadedmetadata", this.videoEventHandler);
+  }
+
+  isAvailable() {
+    return AUDIO_COMPRESSOR_ENABLED && !!this.video && isCompressorApiSupported();
+  }
+
+  applyVideoEffects() {
+    if (!this.video) {
+      return;
+    }
+
+    this.video.classList.toggle("kinopoisk-enhanced-core-media--blur", this.blurEnabled);
+    this.video.classList.toggle("kinopoisk-enhanced-core-media--mirror", this.mirrorEnabled);
+  }
+
+  clearVideoEffects() {
+    this.video?.classList.remove(
+      "kinopoisk-enhanced-core-media--blur",
+      "kinopoisk-enhanced-core-media--mirror",
+    );
+  }
+
+  applyAspectRatio() {
+    if (!this.video) {
+      return;
+    }
+
+    const option = getAspectRatioOption(this.aspectRatioMode);
+    const frame = this.video.parentElement;
+    this.video.classList.add("kinopoisk-enhanced-core-media--aspect-managed");
+    this.video.classList.toggle("kinopoisk-enhanced-core-media--aspect-fill-h", option.value === "fill-h");
+    this.video.classList.toggle("kinopoisk-enhanced-core-media--aspect-fill-v", option.value === "fill-v");
+
+    if (option.value === "fill-h") {
+      frame?.style.setProperty("display", "flex", "important");
+      frame?.style.setProperty("align-items", "center", "important");
+      frame?.style.setProperty("justify-content", "center", "important");
+      frame?.style.setProperty("overflow", "hidden", "important");
+      this.video.style.setProperty("display", "block", "important");
+      this.video.style.setProperty("width", "100%", "important");
+      this.video.style.setProperty("height", "auto", "important");
+      this.video.style.setProperty("max-width", "100%", "important");
+      this.video.style.setProperty("max-height", "none", "important");
+      this.video.style.removeProperty("position");
+      this.video.style.removeProperty("top");
+      this.video.style.removeProperty("left");
+      this.video.style.setProperty("margin-inline", "auto", "important");
+      this.video.style.setProperty("aspect-ratio", "auto", "important");
+      this.video.style.setProperty("object-fit", "contain", "important");
+      this.video.style.removeProperty("transform");
+      return;
+    }
+
+    if (option.value === "fill-v") {
+      frame?.style.setProperty("display", "flex", "important");
+      frame?.style.setProperty("align-items", "center", "important");
+      frame?.style.setProperty("justify-content", "center", "important");
+      frame?.style.setProperty("overflow", "hidden", "important");
+      this.video.style.setProperty("display", "block", "important");
+      this.video.style.setProperty("width", "auto", "important");
+      this.video.style.setProperty("height", "100%", "important");
+      this.video.style.setProperty("max-width", "none", "important");
+      this.video.style.setProperty("max-height", "100%", "important");
+      this.video.style.removeProperty("position");
+      this.video.style.removeProperty("top");
+      this.video.style.removeProperty("left");
+      this.video.style.setProperty("margin-inline", "auto", "important");
+      this.video.style.setProperty("aspect-ratio", "auto", "important");
+      this.video.style.setProperty("object-fit", "contain", "important");
+      this.video.style.removeProperty("transform");
+      return;
+    }
+
+    frame?.style.removeProperty("display");
+    frame?.style.removeProperty("align-items");
+    frame?.style.removeProperty("justify-content");
+    frame?.style.removeProperty("overflow");
+    this.video.style.setProperty("display", "block", "important");
+    this.video.style.setProperty("width", "100%", "important");
+    this.video.style.setProperty("height", "100%", "important");
+    this.video.style.setProperty("max-width", "100%", "important");
+    this.video.style.setProperty("max-height", "100%", "important");
+    this.video.style.removeProperty("position");
+    this.video.style.removeProperty("top");
+    this.video.style.removeProperty("left");
+    this.video.style.setProperty("margin-inline", "auto", "important");
+    this.video.style.setProperty("--kinopoisk-enhanced-core-player-aspect-ratio", option.cssValue || "16 / 9");
+    this.video.style.setProperty("aspect-ratio", option.cssValue || "16 / 9", "important");
+    this.video.style.setProperty("object-fit", "contain", "important");
+    this.video.style.removeProperty("transform");
+  }
+
+  clearAspectRatio() {
+    this.video?.parentElement?.style.removeProperty("display");
+    this.video?.parentElement?.style.removeProperty("align-items");
+    this.video?.parentElement?.style.removeProperty("justify-content");
+    this.video?.parentElement?.style.removeProperty("overflow");
+    this.video?.classList.remove(
+      "kinopoisk-enhanced-core-media--aspect-managed",
+      "kinopoisk-enhanced-core-media--aspect-fill-h",
+      "kinopoisk-enhanced-core-media--aspect-fill-v",
+    );
+    this.video?.style.removeProperty("--kinopoisk-enhanced-core-player-aspect-ratio");
+    this.video?.style.removeProperty("display");
+    this.video?.style.removeProperty("width");
+    this.video?.style.removeProperty("height");
+    this.video?.style.removeProperty("max-width");
+    this.video?.style.removeProperty("max-height");
+    this.video?.style.removeProperty("position");
+    this.video?.style.removeProperty("top");
+    this.video?.style.removeProperty("left");
+    this.video?.style.removeProperty("margin-inline");
+    this.video?.style.removeProperty("aspect-ratio");
+    this.video?.style.removeProperty("object-fit");
+    this.video?.style.removeProperty("transform");
+  }
+
+  setAspectRatio({ mode }) {
+    this.aspectRatioMode = getAspectRatioOption(mode).value;
+    storageSet("aspect-ratio-mode", this.aspectRatioMode);
+    this.applyAspectRatio();
+    this.postAspectRatioStatus();
+  }
+
+  setVideoEffects({ blurEnabled, mirrorEnabled }) {
+    if (typeof blurEnabled === "boolean") {
+      this.blurEnabled = blurEnabled;
+      storageSet("video-blur-enabled", this.blurEnabled);
+    }
+
+    if (typeof mirrorEnabled === "boolean") {
+      this.mirrorEnabled = mirrorEnabled;
+      storageSet("video-mirror-enabled", this.mirrorEnabled);
+    }
+
+    this.applyVideoEffects();
+    this.postEffectsStatus();
+  }
+
+  ensureState() {
+    if (this.state || !this.isAvailable()) {
+      return this.state;
+    }
+
+    try {
+      this.state = createCompressorState(this.video, this.settings);
+    } catch (error) {
+      console.warn("[Kinopoisk Enhanced] embedded compressor unavailable", error);
+      this.state = null;
+    }
+
+    return this.state;
+  }
+
+  disconnectNodes() {
+    if (!this.state) {
+      return;
+    }
+
+    [
+      [this.state.source, this.state.context.destination],
+      [this.state.source, this.state.compressor],
+      [this.state.compressor, this.state.gain],
+      [this.state.gain, this.state.context.destination],
+    ].forEach(([node, target]) => disconnectAudioNode(node, target));
+  }
+
+  disconnect() {
+    if (!this.state) {
+      return;
+    }
+
+    this.disconnectNodes();
+    try {
+      this.state.source.connect(this.state.context.destination);
+    } catch (error) {
+      // The old media element can disappear while a player is being replaced.
+    }
+    this.state = null;
+  }
+
+  async apply(fromUserGesture = false) {
+    if (!this.enabled && !this.state) {
+      this.postStatus();
+      return;
+    }
+
+    const state = this.enabled ? this.ensureState() : this.state;
+    if (!state) {
+      this.postStatus();
+      return;
+    }
+
+    this.disconnectNodes();
+
+    if (this.enabled) {
+      state.source.connect(state.compressor);
+      state.compressor.connect(state.gain);
+      state.gain.connect(state.context.destination);
+      state.active = true;
+
+      if (state.context.state === "suspended" && (fromUserGesture || !document.hidden)) {
+        try {
+          await state.context.resume();
+        } catch (error) {
+          console.warn("[Kinopoisk Enhanced] embedded compressor resume failed", error);
+        }
+      }
+    } else {
+      state.source.connect(state.context.destination);
+      state.active = false;
+    }
+
+    this.postStatus();
+  }
+
+  getStatus() {
+    if (!this.video) {
+      return "no-video";
+    }
+
+    if (!isCompressorApiSupported()) {
+      return "unsupported";
+    }
+
+    if (this.enabled && this.state?.context?.state === "suspended") {
+      return "blocked";
+    }
+
+    return this.enabled ? "enabled" : "ready";
+  }
+
+  getStatusMessage() {
+    if (!this.video) {
+      return "Видео еще не найдено. Настройки сохранятся и применятся позже.";
+    }
+    if (!isCompressorApiSupported()) {
+      return "Браузер не поддерживает AudioContext или компрессор.";
+    }
+    if (this.enabled && this.state?.context?.state === "suspended") {
+      return "Нужен user gesture: клик по плееру или повторное включение компрессора.";
+    }
+    return "Настройки применяются к video внутри iframe.";
+  }
+
+  postStatus() {
+    window.parent?.postMessage({
+      appId: BRIDGE_APP_ID,
+      type: BRIDGE_STATUS_TYPE,
+      available: this.isAvailable(),
+      enabled: this.enabled,
+      status: this.getStatus(),
+      message: this.getStatusMessage(),
+      href: window.location.href,
+    }, "*");
+  }
+
+  postEffectsStatus() {
+    window.parent?.postMessage({
+      appId: BRIDGE_APP_ID,
+      type: BRIDGE_EFFECTS_STATUS_TYPE,
+      available: !!this.video,
+      blurEnabled: this.blurEnabled,
+      mirrorEnabled: this.mirrorEnabled,
+      status: this.video ? "ready" : "no-video",
+      href: window.location.href,
+    }, "*");
+  }
+
+  postAspectRatioStatus() {
+    window.parent?.postMessage({
+      appId: BRIDGE_APP_ID,
+      type: BRIDGE_ASPECT_STATUS_TYPE,
+      available: !!this.video,
+      mode: this.aspectRatioMode,
+      status: this.video ? "ready" : "no-video",
+      href: window.location.href,
+    }, "*");
+  }
+
+  handleMessage(event) {
+    const data = event.data;
+    if (!data || data.appId !== BRIDGE_APP_ID) {
+      return;
+    }
+
+    if (data.type === BRIDGE_EFFECTS_COMMAND_TYPE) {
+      if (data.command === "set-video-effects") {
+        this.setVideoEffects(data);
+      }
+
+      return;
+    }
+
+    if (data.type === BRIDGE_ASPECT_COMMAND_TYPE) {
+      if (data.command === "set-aspect-ratio") {
+        this.setAspectRatio(data);
+      }
+
+      return;
+    }
+
+    if (data.type !== BRIDGE_COMMAND_TYPE) {
+      return;
+    }
+
+    if (!AUDIO_COMPRESSOR_ENABLED) {
+      this.enabled = false;
+      this.disconnect();
+      this.postStatus();
+      return;
+    }
+
+    if (data.command === "ping") {
+      if (data.settings) {
+        this.settings = normalizeCompressorSettings(data.settings);
+        if (this.state) {
+          applyCompressorSettingsToState(this.state, this.settings);
+        }
+      }
+      if (typeof data.enabled === "boolean" && data.enabled !== this.enabled) {
+        this.enabled = data.enabled;
+        storageSet("audio-compressor-enabled", this.enabled);
+        void this.apply(false);
+        return;
+      }
+
+      this.scheduleSync();
+      this.postStatus();
+      return;
+    }
+
+    if (data.command === "set-settings") {
+      this.settings = normalizeCompressorSettings(data.settings);
+      storageSet("audio-compressor-settings-v1", {
+        preset: normalizeCompressorPreset(data.preset),
+        advancedMode: !!data.advancedMode,
+        settings: this.settings,
+      });
+      if (this.state) {
+        applyCompressorSettingsToState(this.state, this.settings);
+      }
+      this.postStatus();
+      return;
+    }
+
+    if (data.command === "set-enabled") {
+      if (data.settings) {
+        this.settings = normalizeCompressorSettings(data.settings);
+        if (this.state) {
+          applyCompressorSettingsToState(this.state, this.settings);
+        }
+      }
+      this.enabled = !!data.enabled;
+      storageSet("audio-compressor-enabled", this.enabled);
+      void this.apply(!!data.fromUserGesture);
+    }
   }
 }
 
@@ -794,11 +1994,13 @@ function mountFooterControls(footer) {
   controlsNode.append(primaryGroup, secondaryGroup);
 
   mediaTargetTracker ??= new MediaTargetTracker();
-  audioCompressor ??= new AudioCompressor(mediaTargetTracker);
+  if (AUDIO_COMPRESSOR_ENABLED) {
+    audioCompressor ??= new AudioCompressor(mediaTargetTracker);
+  }
   videoEffects ??= new VideoEffects(mediaTargetTracker);
   aspectRatioSelector ??= new AspectRatioSelector(mediaTargetTracker);
 
-  audioCompressor.mount(primaryGroup);
+  audioCompressor?.mount(primaryGroup);
   videoEffects.mount(primaryGroup);
   aspectRatioSelector.mount(secondaryGroup);
   mediaTargetTracker.init();
@@ -834,6 +2036,14 @@ function run(context = {}) {
   }
 
   document.documentElement.dataset.kinopoiskEnhancedCore = "enabled";
+
+  if (context.embedded) {
+    embeddedPlayerCore ??= new EmbeddedPlayerCore(context);
+    embeddedPlayerCore.init();
+    console.info("[Kinopoisk Enhanced] embedded core initialized", context);
+    return;
+  }
+
   hideElements();
   syncLayout();
   mediaTargetTracker?.init();

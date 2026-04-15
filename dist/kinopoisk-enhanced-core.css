@@ -216,6 +216,325 @@ div.topAdPad {
   font-variant-numeric: tabular-nums;
 }
 
+.kinopoisk-enhanced-core-compressor-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.kinopoisk-enhanced-core-footer__button--compressor {
+  position: relative;
+  min-width: 74px;
+  padding-right: 22px;
+}
+
+.kinopoisk-enhanced-core-footer__button--compressor::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  width: 6px;
+  height: 6px;
+  margin-top: -5px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  opacity: 0.72;
+  transform: rotate(45deg);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
+}
+
+.kinopoisk-enhanced-core-popup-open .kinopoisk-enhanced-core-footer__button--compressor::after,
+.kinopoisk-enhanced-core-footer__button--compressor.kinopoisk-enhanced-core-popup-trigger-open::after {
+  opacity: 1;
+  transform: rotate(225deg);
+}
+
+.kinopoisk-enhanced-core-compressor-popup {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  z-index: 20;
+  box-sizing: border-box;
+  width: 292px;
+  padding: 12px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 20% 0, rgb(255 179 33 / 13%), transparent 34%),
+    linear-gradient(135deg, rgb(13 15 19 / 96%), rgb(23 27 34 / 96%));
+  box-shadow: 0 18px 44px rgb(0 0 0 / 38%);
+  color: rgb(244 247 250 / 92%);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease,
+    visibility 0.16s ease;
+  visibility: hidden;
+}
+
+.kinopoisk-enhanced-core-popup-open .kinopoisk-enhanced-core-compressor-popup {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  visibility: visible;
+}
+
+.kinopoisk-enhanced-core-compressor-popup__title {
+  display: block;
+  margin-bottom: 8px;
+  color: #fff;
+  font: 800 13px/1.2 Arial, sans-serif;
+}
+
+.kinopoisk-enhanced-core-compressor-popup__status {
+  min-height: 15px;
+  margin-bottom: 10px;
+  color: rgb(255 255 255 / 58%);
+  font: 600 11px/1.35 Arial, sans-serif;
+}
+
+.kinopoisk-enhanced-core-compressor-popup__meter {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 9px 10px;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 10px;
+  background: rgb(4 8 13 / 38%);
+}
+
+.kinopoisk-enhanced-core-compressor-popup__meter-line,
+.kinopoisk-enhanced-core-compressor-popup__row-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.kinopoisk-enhanced-core-compressor-popup__meter-line {
+  font: 700 11px/1.3 Arial, sans-serif;
+}
+
+.kinopoisk-enhanced-core-compressor-popup__meter-label,
+.kinopoisk-enhanced-core-compressor-popup__value {
+  color: rgb(255 255 255 / 56%);
+}
+
+.kinopoisk-enhanced-core-compressor-popup__meter-value {
+  color: rgb(255 255 255 / 88%);
+  text-align: right;
+}
+
+.kinopoisk-enhanced-core-compressor-popup__presets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.kinopoisk-enhanced-core-compressor-popup__preset,
+.kinopoisk-enhanced-core-compressor-popup__toggle,
+.kinopoisk-enhanced-core-compressor-popup__reset {
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 9px;
+  background: rgb(255 255 255 / 7%);
+  color: rgb(255 255 255 / 78%);
+  cursor: pointer;
+  font: 800 11px/1 Arial, sans-serif;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.kinopoisk-enhanced-core-compressor-popup__preset {
+  padding: 8px 10px;
+}
+
+.kinopoisk-enhanced-core-compressor-popup__preset:hover,
+.kinopoisk-enhanced-core-compressor-popup__preset:focus-visible,
+.kinopoisk-enhanced-core-compressor-popup__toggle:hover,
+.kinopoisk-enhanced-core-compressor-popup__toggle:focus-visible,
+.kinopoisk-enhanced-core-compressor-popup__reset:hover,
+.kinopoisk-enhanced-core-compressor-popup__reset:focus-visible {
+  border-color: rgb(255 179 33 / 42%);
+  background: rgb(255 255 255 / 12%);
+  color: #fff;
+  outline: none;
+}
+
+.kinopoisk-enhanced-core-popup-active {
+  border-color: rgb(255 179 33 / 48%);
+  background: linear-gradient(135deg, rgb(255 122 0 / 88%), rgb(255 179 33 / 88%));
+  color: #15110a;
+}
+
+.kinopoisk-enhanced-core-compressor-popup__advanced {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+  color: rgb(255 255 255 / 80%);
+  cursor: pointer;
+  font: 700 12px/1 Arial, sans-serif;
+  user-select: none;
+}
+
+.kinopoisk-enhanced-core-compressor-popup__advanced input {
+  margin: 0;
+  accent-color: #ffb321;
+}
+
+.kinopoisk-enhanced-core-compressor-popup__controls {
+  display: grid;
+  gap: 12px;
+}
+
+.kinopoisk-enhanced-core-compressor-popup__controls[hidden] {
+  display: none;
+}
+
+.kinopoisk-enhanced-core-compressor-popup__row {
+  display: grid;
+  gap: 8px;
+}
+
+.kinopoisk-enhanced-core-compressor-popup__label-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.kinopoisk-enhanced-core-compressor-popup__label {
+  color: rgb(255 255 255 / 90%);
+  font: 800 12px/1 Arial, sans-serif;
+}
+
+.kinopoisk-enhanced-core-compressor-popup__hint {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 8%);
+  color: rgb(255 255 255 / 58%);
+  cursor: help;
+  font: 800 9px/1 Arial, sans-serif;
+}
+
+.kinopoisk-enhanced-core-compressor-popup__hint::before {
+  content: "?";
+}
+
+.kinopoisk-enhanced-core-compressor-popup__hint::after {
+  content: attr(data-hint);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: max-content;
+  max-width: 210px;
+  padding: 7px 9px;
+  border: 1px solid rgb(255 179 33 / 24%);
+  border-radius: 8px;
+  background: rgb(5 8 12 / 96%);
+  box-shadow: 0 10px 22px rgb(0 0 0 / 35%);
+  color: rgb(255 255 255 / 84%);
+  font: 600 11px/1.35 Arial, sans-serif;
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  white-space: normal;
+}
+
+.kinopoisk-enhanced-core-compressor-popup__hint:hover::after,
+.kinopoisk-enhanced-core-compressor-popup__hint:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+.kinopoisk-enhanced-core-compressor-popup__value {
+  min-width: 58px;
+  font: 800 12px/1 Arial, sans-serif;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.kinopoisk-enhanced-core-compressor-popup__slider {
+  width: 100%;
+  height: 12px;
+  margin: 0;
+  padding: 0;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.kinopoisk-enhanced-core-compressor-popup__slider::-moz-range-track {
+  height: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 14%);
+}
+
+.kinopoisk-enhanced-core-compressor-popup__slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 999px;
+  background: #ffb321;
+  box-shadow: 0 0 0 2px rgb(255 179 33 / 14%);
+}
+
+.kinopoisk-enhanced-core-compressor-popup__slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 14%);
+}
+
+.kinopoisk-enhanced-core-compressor-popup__slider::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  margin-top: -4px;
+  border: 0;
+  border-radius: 999px;
+  appearance: none;
+  background: #ffb321;
+  box-shadow: 0 0 0 2px rgb(255 179 33 / 14%);
+}
+
+.kinopoisk-enhanced-core-compressor-popup__footer {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgb(255 255 255 / 8%);
+}
+
+.kinopoisk-enhanced-core-compressor-popup__toggle {
+  flex: 1 1 auto;
+  padding: 8px 10px;
+}
+
+.kinopoisk-enhanced-core-compressor-popup__toggle.kinopoisk-enhanced-core-popup-active {
+  border-color: rgb(236 136 136 / 42%);
+  background: rgb(168 46 46 / 20%);
+  color: #ffd1d1;
+}
+
+.kinopoisk-enhanced-core-compressor-popup__reset {
+  flex: 0 0 auto;
+  padding: 8px 11px;
+}
+
 .kinopoisk-enhanced-core-media--blur {
   filter: blur(50px) !important;
 }
@@ -251,14 +570,40 @@ div.topAdPad {
   height: 100% !important;
   max-width: 100% !important;
   max-height: 100% !important;
+  aspect-ratio: var(--kinopoisk-enhanced-core-player-aspect-ratio, auto) !important;
   object-fit: contain !important;
 }
 
-.kinopoisk-enhanced-core-media--aspect-fill {
+.kinopoisk-enhanced-core-media--aspect-fill-h {
+  display: block !important;
+  width: 100% !important;
+  height: auto !important;
+  max-height: none !important;
+  margin-inline: auto !important;
+  aspect-ratio: auto !important;
+  object-fit: contain !important;
+}
+
+.kinopoisk-enhanced-core-media--aspect-fill-v {
+  display: block !important;
+  width: auto !important;
+  height: 100% !important;
+  max-width: none !important;
+  margin-inline: auto !important;
+  aspect-ratio: auto !important;
+  object-fit: contain !important;
+}
+
+.kinopoisk-enhanced-core-media-frame.kinopoisk-enhanced-core-media--aspect-fill-h,
+.kinopoisk-enhanced-core-media-frame.kinopoisk-enhanced-core-media--aspect-fill-v {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   width: 100% !important;
   height: 100% !important;
-  aspect-ratio: auto !important;
-  object-fit: fill !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
 }
 
 .mainContainer.kinopoisk-enhanced-core-main--fill-media {
