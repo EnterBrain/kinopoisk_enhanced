@@ -216,6 +216,182 @@ div.topAdPad {
   font-variant-numeric: tabular-nums;
 }
 
+.kinopoisk-enhanced-core-footer__button--scale {
+  min-width: 74px;
+  font-variant-numeric: tabular-nums;
+}
+
+.kinopoisk-enhanced-core-footer__button--source {
+  max-width: 180px;
+  min-width: 86px;
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kinopoisk-enhanced-core-player-source-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.kinopoisk-enhanced-core-player-source-popup {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 10px);
+  z-index: 20;
+  box-sizing: border-box;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(360px, calc(100vh - 120px));
+  padding: 9px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 15% 0, rgb(255 179 33 / 12%), transparent 34%),
+    linear-gradient(135deg, rgb(13 15 19 / 96%), rgb(23 27 34 / 96%));
+  box-shadow: 0 18px 44px rgb(0 0 0 / 38%);
+  color: rgb(244 247 250 / 92%);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease,
+    visibility 0.16s ease;
+  visibility: hidden;
+}
+
+.kinopoisk-enhanced-core-popup-open .kinopoisk-enhanced-core-player-source-popup {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  visibility: visible;
+}
+
+.kinopoisk-enhanced-core-player-source-popup__title {
+  margin-bottom: 8px;
+  color: #fff;
+  font: 800 12px/1.2 Arial, sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.kinopoisk-enhanced-core-player-source-popup__list {
+  display: grid;
+  gap: 6px;
+  max-height: 306px;
+  overflow: auto;
+}
+
+.kinopoisk-enhanced-core-player-source-popup__item {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 9px;
+  background: rgb(255 255 255 / 7%);
+  color: rgb(255 255 255 / 78%);
+  cursor: pointer;
+  font: 800 12px/1.25 Arial, sans-serif;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kinopoisk-enhanced-core-player-source-popup__item:hover,
+.kinopoisk-enhanced-core-player-source-popup__item:focus-visible {
+  border-color: rgb(255 179 33 / 42%);
+  background: rgb(255 255 255 / 12%);
+  color: #fff;
+  outline: none;
+}
+
+.kinopoisk-enhanced-core-player-source-popup__empty {
+  display: block;
+  padding: 9px 10px;
+  color: rgb(255 255 255 / 58%);
+  font: 700 12px/1.35 Arial, sans-serif;
+}
+
+.kinopoisk-enhanced-core-player-source-menu-hidden {
+  display: none !important;
+}
+
+.kinopoisk-enhanced-core-scale-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.kinopoisk-enhanced-core-scale-popup {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  z-index: 20;
+  box-sizing: border-box;
+  width: 180px;
+  padding: 8px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgb(13 15 19 / 96%), rgb(23 27 34 / 96%));
+  box-shadow: 0 18px 44px rgb(0 0 0 / 38%);
+  color: rgb(244 247 250 / 92%);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease,
+    visibility 0.16s ease;
+  visibility: hidden;
+}
+
+.kinopoisk-enhanced-core-popup-open .kinopoisk-enhanced-core-scale-popup {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  visibility: visible;
+}
+
+.kinopoisk-enhanced-core-scale-popup__title,
+.kinopoisk-enhanced-core-scale-popup__control {
+  width: 100%;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 9px;
+  background: rgb(255 255 255 / 7%);
+  color: rgb(255 255 255 / 78%);
+  cursor: pointer;
+  font: 800 12px/1 Arial, sans-serif;
+}
+
+.kinopoisk-enhanced-core-scale-popup__title {
+  margin-bottom: 8px;
+  padding: 9px 10px;
+  color: #fff;
+  text-align: left;
+}
+
+.kinopoisk-enhanced-core-scale-popup__controls {
+  display: grid;
+  gap: 6px;
+}
+
+.kinopoisk-enhanced-core-scale-popup__control {
+  padding: 8px 10px;
+}
+
+.kinopoisk-enhanced-core-scale-popup__title:hover,
+.kinopoisk-enhanced-core-scale-popup__title:focus-visible,
+.kinopoisk-enhanced-core-scale-popup__control:hover,
+.kinopoisk-enhanced-core-scale-popup__control:focus-visible {
+  border-color: rgb(255 179 33 / 42%);
+  background: rgb(255 255 255 / 12%);
+  color: #fff;
+  outline: none;
+}
+
 .kinopoisk-enhanced-core-compressor-wrap {
   position: relative;
   display: inline-flex;
@@ -540,13 +716,23 @@ div.topAdPad {
 }
 
 .kinopoisk-enhanced-core-media--mirror {
-  transform: scaleX(-1) !important;
+  transform: scale(var(--kinopoisk-enhanced-core-video-scale, 1)) scaleX(-1) !important;
+  transform-origin: center !important;
+}
+
+.kinopoisk-enhanced-core-media--scaled {
+  transform: scale(var(--kinopoisk-enhanced-core-video-scale, 1)) !important;
   transform-origin: center !important;
 }
 
 .kinopoisk-enhanced-core-media--blur.kinopoisk-enhanced-core-media--mirror {
   filter: blur(50px) !important;
-  transform: scaleX(-1) !important;
+  transform: scale(var(--kinopoisk-enhanced-core-video-scale, 1)) scaleX(-1) !important;
+  transform-origin: center !important;
+}
+
+.kinopoisk-enhanced-core-media--mirror.kinopoisk-enhanced-core-media--scaled {
+  transform: scale(var(--kinopoisk-enhanced-core-video-scale, 1)) scaleX(-1) !important;
   transform-origin: center !important;
 }
 
@@ -572,41 +758,10 @@ div.topAdPad {
   max-height: 100% !important;
   aspect-ratio: var(--kinopoisk-enhanced-core-player-aspect-ratio, auto) !important;
   object-fit: contain !important;
+  object-position: center center !important;
 }
 
-.kinopoisk-enhanced-core-media--aspect-fill-h {
-  display: block !important;
-  width: 100% !important;
-  height: auto !important;
-  max-height: none !important;
-  margin-inline: auto !important;
-  aspect-ratio: auto !important;
-  object-fit: contain !important;
-}
-
-.kinopoisk-enhanced-core-media--aspect-fill-v {
-  display: block !important;
-  width: auto !important;
-  height: 100% !important;
-  max-width: none !important;
-  margin-inline: auto !important;
-  aspect-ratio: auto !important;
-  object-fit: contain !important;
-}
-
-.kinopoisk-enhanced-core-media-frame.kinopoisk-enhanced-core-media--aspect-fill-h,
-.kinopoisk-enhanced-core-media-frame.kinopoisk-enhanced-core-media--aspect-fill-v {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  width: 100% !important;
-  height: 100% !important;
-  max-width: 100% !important;
-  max-height: 100% !important;
-  overflow: hidden !important;
-}
-
-.mainContainer.kinopoisk-enhanced-core-main--fill-media {
+.mainContainer.kinopoisk-enhanced-core-main--fit-media {
   overflow: hidden;
 }
 

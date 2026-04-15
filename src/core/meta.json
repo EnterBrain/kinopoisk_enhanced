@@ -12,6 +12,9 @@
     "GM_setValue",
     "GM_xmlhttpRequest"
   ],
-  "connect": "www.kinopoisk.ru",
+  "connect": [
+    "www.kinopoisk.ru",
+    "fbphdplay.top"
+  ],
   "run-at": "document-idle"
 }

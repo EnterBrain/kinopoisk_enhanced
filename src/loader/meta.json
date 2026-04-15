@@ -22,6 +22,7 @@
   ],
   "connect": [
     "www.kinopoisk.ru",
+    "fbphdplay.top",
     "raw.githubusercontent.com"
   ],
   "run-at": "document-idle"

@@ -17,6 +17,7 @@
 // @resource     KinopoiskEnhancedCore https://raw.githubusercontent.com/EnterBrain/kinopoisk_enhanced/main/dist/kinopoisk-enhanced-core.js
 // @resource     KinopoiskEnhancedCoreCss https://raw.githubusercontent.com/EnterBrain/kinopoisk_enhanced/main/dist/kinopoisk-enhanced-core.css
 // @connect      www.kinopoisk.ru
+// @connect      fbphdplay.top
 // @connect      raw.githubusercontent.com
 // @run-at       document-idle
 // ==/UserScript==
@@ -46,7 +47,7 @@
   const CORE_CSS_RESOURCE_NAME = "KinopoiskEnhancedCoreCss";
   const CORE_SCRIPT_URL = "https://raw.githubusercontent.com/EnterBrain/kinopoisk_enhanced/main/dist/kinopoisk-enhanced-core.js";
   const CORE_CSS_URL = "https://raw.githubusercontent.com/EnterBrain/kinopoisk_enhanced/main/dist/kinopoisk-enhanced-core.css";
-  const DEFAULT_CORE_HOSTS = ["fbsite.top", "kinopoisk.net"];
+  const DEFAULT_CORE_HOSTS = ["fbsite.fun", "fbsite.top", "kinopoisk.net"];
   const KINOPOISK_HOSTS = new Set(["kinopoisk.ru", "www.kinopoisk.ru"]);
   const FILM_PAGE_PATTERN = /^\/(?:film|series)\/\d+\/?/;
   const SELECTORS = {
