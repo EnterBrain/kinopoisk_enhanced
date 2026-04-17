@@ -149,8 +149,12 @@ function getKinopoiskId() {
   return document.querySelector("[data-kinopoisk]")?.dataset.kinopoisk || "";
 }
 
+function getHeadTitle() {
+  return document.head?.querySelector("title")?.textContent?.trim() || document.title.trim();
+}
+
 function getFallbackTitle() {
-  return document.title.trim() || window.location.pathname;
+  return getHeadTitle() || window.location.pathname;
 }
 
 async function fetchOriginalTitle() {
