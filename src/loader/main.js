@@ -7,6 +7,7 @@ const CORE_CSS_RESOURCE_NAME = "KinopoiskEnhancedCoreCss";
 const CORE_SCRIPT_URL = "https://raw.githubusercontent.com/EnterBrain/kinopoisk_enhanced/main/dist/kinopoisk-enhanced-core.js";
 const CORE_CSS_URL = "https://raw.githubusercontent.com/EnterBrain/kinopoisk_enhanced/main/dist/kinopoisk-enhanced-core.css";
 const DEFAULT_CORE_HOSTS = ["fbsite.fun", "fbsite.top", "kinopoisk.net"];
+const KINOBOX_API_ORIGIN = "https://fbphdplay.top";
 const KINOPOISK_HOSTS = new Set(["kinopoisk.ru", "www.kinopoisk.ru"]);
 const FILM_PAGE_PATTERN = /^\/(?:film|series)\/\d+\/?/;
 const SELECTORS = {
@@ -20,6 +21,7 @@ let lastHandledUrl = "";
 let observer;
 let menuCommandIds = [];
 let coreLoadPromise;
+const playerAvailabilityByKinopoiskId = new Map();
 
 function isKinopoiskPage() {
   return KINOPOISK_HOSTS.has(window.location.hostname);
@@ -75,6 +77,10 @@ function getMirrorUrl() {
   url.hostname = url.hostname.replace(/kinopoisk\.ru$/i, "kinopoisk.net");
 
   return url.href;
+}
+
+function getKinopoiskId() {
+  return window.location.pathname.match(/^\/(?:film|series)\/(\d+)\/?/)?.[1] || "";
 }
 
 function createButton() {
@@ -185,8 +191,60 @@ function openMirrorPage() {
   window.location.assign(getMirrorUrl());
 }
 
-function injectOpenButton() {
+function removeOpenButton() {
+  document.getElementById(FEATURE_BUTTON_WRAPPER_ID)?.remove();
+  document.getElementById(FEATURE_BUTTON_ID)?.remove();
+}
+
+function hasAvailablePlayer(payload) {
+  return Array.isArray(payload?.data) && payload.data.some((player) => !!player?.iframeUrl);
+}
+
+function getPlayerAvailability(kinopoiskId) {
+  if (playerAvailabilityByKinopoiskId.has(kinopoiskId)) {
+    return playerAvailabilityByKinopoiskId.get(kinopoiskId);
+  }
+
+  const url = new URL("/api/players", KINOBOX_API_ORIGIN);
+  url.searchParams.set("kinopoisk", kinopoiskId);
+
+  const availabilityPromise = requestJson(url)
+    .then((payload) => {
+      const isAvailable = hasAvailablePlayer(payload);
+      playerAvailabilityByKinopoiskId.set(kinopoiskId, isAvailable);
+      return isAvailable;
+    })
+    .catch((error) => {
+      console.warn("[Kinopoisk Enhanced] failed to check player availability", error);
+      playerAvailabilityByKinopoiskId.delete(kinopoiskId);
+      return true;
+    });
+
+  playerAvailabilityByKinopoiskId.set(kinopoiskId, availabilityPromise);
+  return availabilityPromise;
+}
+
+async function injectOpenButton() {
   if (!isSupportedKinopoiskCard()) {
+    return;
+  }
+
+  const kinopoiskId = getKinopoiskId();
+  const handledUrl = window.location.href;
+
+  if (!kinopoiskId) {
+    removeOpenButton();
+    return;
+  }
+
+  const hasPlayers = await getPlayerAvailability(kinopoiskId);
+
+  if (handledUrl !== window.location.href || kinopoiskId !== getKinopoiskId()) {
+    return;
+  }
+
+  if (!hasPlayers) {
+    removeOpenButton();
     return;
   }
 
@@ -228,19 +286,18 @@ function cleanupUnsupportedPage() {
     return;
   }
 
-  document.getElementById(FEATURE_BUTTON_WRAPPER_ID)?.remove();
-  document.getElementById(FEATURE_BUTTON_ID)?.remove();
+  removeOpenButton();
 }
 
 function handleRouteChange() {
   if (lastHandledUrl === window.location.href) {
-    injectOpenButton();
+    void injectOpenButton();
     return;
   }
 
   lastHandledUrl = window.location.href;
   cleanupUnsupportedPage();
-  injectOpenButton();
+  void injectOpenButton();
 }
 
 function observeKinopoiskPageChanges() {
@@ -343,6 +400,11 @@ function requestText(url) {
 
     return response.text();
   });
+}
+
+async function requestJson(url) {
+  const text = await requestText(url);
+  return JSON.parse(text);
 }
 
 function getLoadedCoreApi() {
