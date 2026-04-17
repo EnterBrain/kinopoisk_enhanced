@@ -75,6 +75,7 @@ function isEmbeddedFrameFromCoreHost() {
 function getMirrorUrl() {
   const url = new URL(window.location.href);
   url.hostname = url.hostname.replace(/kinopoisk\.ru$/i, "kinopoisk.net");
+  url.search = "";
 
   return url.href;
 }
