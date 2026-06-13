@@ -11,7 +11,7 @@ UserJS-скрипт для улучшения пользовательского
 ## Возможности
 
 - Добавляет кнопку на страницы фильмов и сериалов (`/film/:id/`, `/series/:id/`).
-- Открывает соответствующую страницу на `kinopoisk.net` в новой вкладке.
+- Открывает соответствующую страницу на `kinokino.vip`.
 - Состоит из двух уровней: `loader` и `core`.
 - Позволяет через меню Violentmonkey/Tampermonkey добавлять и удалять сайты, на которых должен запускаться `core`.
 
@@ -84,7 +84,7 @@ npm run build
 Скрипт сборки создаст:
 
 - `dist/kinopoisk-enhanced-loader.user.js` - основной userscript для установки.
-- `dist/kinopoisk-enhanced-core.js` - plain JS core-артефакт без userscript-метаданных, который loader подтягивает на `kinopoisk.net` и других зеркалах.
+- `dist/kinopoisk-enhanced-core.js` - plain JS core-артефакт без userscript-метаданных, который loader подтягивает на `kinokino.vip` и других зеркалах.
 - `dist/kinopoisk-enhanced-core.css` - стили core, которые loader подтягивает рядом с core-скриптом.
 - `dist/kinopoisk-enhanced-dev.user.js` - монолитный userscript для локального тестирования.
 

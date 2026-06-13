@@ -6,7 +6,9 @@ const CORE_RESOURCE_NAME = "KinopoiskEnhancedCore";
 const CORE_CSS_RESOURCE_NAME = "KinopoiskEnhancedCoreCss";
 const CORE_SCRIPT_URL = "https://raw.githubusercontent.com/EnterBrain/kinopoisk_enhanced/main/dist/kinopoisk-enhanced-core.js";
 const CORE_CSS_URL = "https://raw.githubusercontent.com/EnterBrain/kinopoisk_enhanced/main/dist/kinopoisk-enhanced-core.css";
-const DEFAULT_CORE_HOSTS = ["fbsite.fun", "fbsite.top", "kinopoisk.net"];
+const MIRROR_HOST = "kinokino.vip";
+const LEGACY_CORE_HOSTS = new Map([["kinopoisk.net", MIRROR_HOST]]);
+const DEFAULT_CORE_HOSTS = ["fbsite.fun", "fbsite.top", MIRROR_HOST];
 const KINOBOX_API_ORIGIN = "https://fbphdplay.top";
 const KINOPOISK_HOSTS = new Set(["kinopoisk.ru", "www.kinopoisk.ru"]);
 const FILM_PAGE_PATTERN = /^\/(?:film|series)\/\d+\/?/;
@@ -38,8 +40,14 @@ function normalizeHost(hostname) {
 function getCoreHosts() {
   const storedHosts = GM_getValue(CORE_HOSTS_STORAGE_KEY, DEFAULT_CORE_HOSTS);
   const hosts = Array.isArray(storedHosts) ? storedHosts : DEFAULT_CORE_HOSTS;
+  const normalizedHosts = hosts.map(normalizeHost).filter(Boolean);
+  const migratedHosts = normalizedHosts.map((host) => LEGACY_CORE_HOSTS.get(host) || host);
+  const uniqueHosts = [...new Set(migratedHosts)].sort();
 
-  return [...new Set(hosts.map(normalizeHost).filter(Boolean))].sort();
+  if (JSON.stringify(uniqueHosts) !== JSON.stringify([...new Set(normalizedHosts)].sort())) {
+    GM_setValue(CORE_HOSTS_STORAGE_KEY, uniqueHosts);
+  }
+  return uniqueHosts;
 }
 
 function saveCoreHosts(hosts) {
@@ -74,7 +82,7 @@ function isEmbeddedFrameFromCoreHost() {
 
 function getMirrorUrl() {
   const url = new URL(window.location.href);
-  url.hostname = url.hostname.replace(/kinopoisk\.ru$/i, "kinopoisk.net");
+  url.hostname = MIRROR_HOST;
   url.search = "";
 
   return url.href;
